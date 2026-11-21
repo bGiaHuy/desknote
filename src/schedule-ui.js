@@ -11,7 +11,7 @@
     </section>
     <section class="desktop-calendar" aria-label="Calendar and important dates">
       <div class="schedule-heading calendar-heading"><button id="calendarMonth" title="Go to current month"></button><div class="calendar-nav"><button id="calendarToday">Today</button><button id="calendarPrev" aria-label="Previous month">‹</button><button id="calendarNext" aria-label="Next month">›</button></div></div>
-      <div class="calendar-weekdays" aria-hidden="true">${['T2','T3','T4','T5','T6','T7','CN'].map(x=>`<span>${x}</span>`).join('')}</div>
+      <div class="calendar-weekdays" aria-hidden="true">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<span>${x}</span>`).join('')}</div>
       <div id="calendarGrid" class="calendar-grid" role="group" aria-label="Choose a date"></div>
       <div class="calendar-key"><span><i class="dot-task"></i>Work</span><span><i class="dot-routine"></i>Routines</span><span><i class="dot-important"></i>Important</span></div>
       <div class="schedule-heading day-heading"><h3 id="selectedDay"></h3><button id="scheduleAll">All dates</button><button id="addEvent" aria-label="Add event">+</button></div>
