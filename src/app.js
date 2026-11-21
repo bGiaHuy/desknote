@@ -23,16 +23,16 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const todayISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
 
-const EMOJIS = ['💼', '🏠', '📚', '🏡', '💪', '🎨', '🛒', '✈️', '💡', '🎯', '🌱', '💰', '🧘', '🎮', '🍳', '❤️', '🐾', '📝'];
+const EMOJIS = ['·'];
 const TAG_COLORS = [
   ['#E7F0FC', '#3E7BD6'], ['#EFE9FB', '#7A5BC7'], ['#E6F2E8', '#4F9463'],
   ['#FCE8EE', '#C94F72'], ['#FBF0DC', '#B87718'], ['#E4F4F4', '#2E8F8F'],
 ];
 const PRIORITY = {
-  high: { label: 'High', color: '#D4577A' },
-  medium: { label: 'Medium', color: '#C27C1E' },
-  low: { label: 'Low', color: '#3E7BD6' },
-  none: { label: 'None', color: '#C9C6BE' },
+  high: { label: 'Cao', color: '#d49b9c' },
+  medium: { label: 'Vừa', color: '#cfbc89' },
+  low: { label: 'Thấp', color: '#abc4ce' },
+  none: { label: 'Không', color: '#C9C6BE' },
 };
 
 // ---------- state ----------
@@ -40,71 +40,34 @@ let S = null;
 let openId = null;
 let saveTimer = null;
 
-function seed() {
-  const c = [
-    { id: uid(), name: 'Work', icon: '💼' },
-    { id: uid(), name: 'Personal', icon: '🏠' },
-    { id: uid(), name: 'Study', icon: '📚' },
-    { id: uid(), name: 'Home', icon: '🏡' },
-  ];
-  const t = (catId, title, time, done = false, extra = {}) => ({
-    id: uid(), catId, title, time, done, date: todayISO(), desc: '', priority: 'none',
-    tags: [], subtasks: [], notes: '', createdAt: Date.now(), ...extra,
-  });
-  return {
-    version: 1,
-    activeCat: c[0].id,
-    categories: c,
-    tasks: [
-      t(c[0].id, 'Reply to client emails', '09:00', true),
-      t(c[0].id, 'Finish project proposal', '11:00', false, {
-        desc: 'Finalize the proposal. Include timeline, scope and pricing details.',
-        priority: 'high', tags: ['Work', 'Proposal'],
-        subtasks: [
-          { id: uid(), text: 'Outline key points', done: true },
-          { id: uid(), text: 'Add timeline and milestones', done: true },
-          { id: uid(), text: 'Include pricing details', done: false },
-          { id: uid(), text: 'Proofread and polish', done: false },
-        ],
-        notes: 'Keep it concise and focus on business value. ✨',
-      }),
-      t(c[0].id, 'Team sync meeting', '13:00', true),
-      t(c[0].id, 'Update roadmap', '15:00'),
-      t(c[1].id, 'Call mom', '18:00', false, { priority: 'medium' }),
-      t(c[2].id, 'Read one chapter', '', false),
-      t(c[3].id, 'Water the plants 🌿', '08:00', false),
-    ],
-  };
-}
+function seed() { return {version:1,activeCat:'@all',categories:[{id:'work',name:'Công việc',icon:''},{id:'study',name:'Học tập',icon:''}],tasks:[]}; }
 
 let canSave = false;
 function persist() {
   if (!canSave || !S) return;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => api.save(S), 250);
+  window.scheduleChanged?.();
+  saveTimer = setTimeout(() => { saveTimer = null; if (api.saveSync && !api.saveSync(S)) toast('Không lưu được. Giữ ứng dụng mở và thử lại.'); else if (!api.saveSync) api.save(S); }, 250);
 }
 window.addEventListener('beforeunload', () => { clearTimeout(saveTimer); if (S && canSave) (api.saveSync || api.save)(S); });
 
 const cat = (id) => S.categories.find((c) => c.id === id);
 const task = (id) => S.tasks.find((t) => t.id === id);
-const catTasks = () => S.tasks.filter((t) => t.catId === S.activeCat);
+let agendaView = false;
+const catTasks = () => S.tasks.filter(t => (S.activeCat === '@all' || t.catId === S.activeCat) && (!agendaView || t.date));
 
 // ---------- formatting ----------
-function fmtTime(hhmm) {
-  if (!hhmm) return '';
-  const [h, m] = hhmm.split(':').map(Number);
-  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
-}
+function fmtTime(hhmm) { return hhmm || ''; }
 function fmtDate(iso) {
   if (!iso) return '';
   const d = new Date(iso + 'T00:00:00');
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const diff = Math.round((d - today) / 86400000);
-  const md = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  if (diff === 0) return `Today, ${md}`;
-  if (diff === 1) return `Tomorrow, ${md}`;
-  if (diff === -1) return `Yesterday, ${md}`;
-  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  const md = d.toLocaleDateString('vi-VN', { month: 'short', day: 'numeric' });
+  if (diff === 0) return `Hôm nay, ${md}`;
+  if (diff === 1) return `Ngày mai, ${md}`;
+  if (diff === -1) return `Hôm qua, ${md}`;
+  return d.toLocaleDateString('vi-VN', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 function tagColor(name) {
   let h = 0; for (const ch of name.toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -128,133 +91,42 @@ function parseQuickAdd(text) {
 
 // ---------- header / greeting ----------
 function renderGreeting() {
-  const h = new Date().getHours();
-  const [g, icon] = h < 12 ? ['Good morning', '☀️'] : h < 17 ? ['Good afternoon', '🌤️'] : h < 21 ? ['Good evening', '🌙'] : ['Good night', '🌙'];
-  $('#greeting').textContent = g;
-  const ic = $('#todayIcon');
-  ic.textContent = icon;
-  ic.classList.toggle('moon', icon !== '☀️');
+  $('#greeting').textContent = agendaView ? 'Lịch làm việc' : 'Việc cần làm';
+  $('#deskDate').textContent = new Date().toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit',year:'numeric'});
 }
 
 function renderStats(celebrate = false) {
   const list = catTasks();
   const done = list.filter((t) => t.done).length;
   const pct = list.length ? Math.round((done / list.length) * 100) : 0;
-  $('#todaySub').textContent = list.length ? `${done} of ${list.length} tasks completed` : 'No tasks yet';
+  $('#todaySub').textContent = list.length ? `${list.length - done} việc còn lại · ${done} hoàn thành` : 'Chưa có công việc';
   $('#progressFill').style.width = pct + '%';
   $('#progressPct').textContent = pct + '%';
 
-  const allDone = list.length > 0 && done === list.length;
-  const pt = $('#plantText');
-  pt.innerHTML = allDone ? 'All done!<br/>You bloomed today 🌸' : SCENES[sceneIndex()].text;
-  if (celebrate && allDone) {
-    const pc = $('#plantCard');
-    pc.classList.remove('grow'); void pc.offsetWidth; pc.classList.add('grow');
-    floatHearts();
-  }
   // tab counters
   document.querySelectorAll('.tab[data-id]').forEach((el) => {
-    const n = S.tasks.filter((t) => t.catId === el.dataset.id && !t.done).length;
+    const n = S.tasks.filter((t) => (el.dataset.id === '@all' || t.catId === el.dataset.id) && !t.done).length;
     const c = el.querySelector('.count'); if (c) c.textContent = n || '';
   });
   const open = S.tasks.filter((t) => !t.done).length;
-  $('#miniCount').textContent = open ? `· ${open} left` : '· all done 🌸';
+  $('#miniCount').textContent = open ? `· ${open}` : '· xong';
 }
 
-// ---------- daily footer (a different little scene every day) ----------
-const SCENES = [
-  { name: 'sprout', bg: 'linear-gradient(135deg,#FAF6EE,#F4EEE2)', ink: '#7C7566', accent: '#D4577A', mark: '♡',
-    text: 'Small steps,<br/>big progress.',
-    svg: `<ellipse cx="30" cy="54" rx="14" ry="3" fill="#E9E4D8"/>
-      <g class="sway" style="transform-origin:30px 54px"><path d="M30 54V30" stroke="#6FAE7E" stroke-width="3" stroke-linecap="round"/>
-      <path d="M30 36c-2-9-9-13-18-12 1 9 8 13 18 12Z" fill="#8CC79A"/><path d="M30 31c1-9 8-14 17-14 0 9-7 14-17 14Z" fill="#6FAE7E"/></g>` },
-  { name: 'sunny', bg: 'linear-gradient(135deg,#EEF5FC,#F3F0FA)', ink: '#5B6B82', accent: '#E9A93A', mark: '✦',
-    text: 'Slow progress<br/>is still progress.',
-    svg: `<g class="spin" style="transform-origin:24px 24px">${[0, 45, 90, 135, 180, 225, 270, 315].map((a) => `<rect x="23" y="7" width="2.4" height="6" rx="1.2" fill="#F6C86B" transform="rotate(${a} 24 24)"/>`).join('')}</g>
-      <circle cx="24" cy="24" r="9" fill="#F6C86B"/>
-      <g class="drift"><path d="M20 46a8 8 0 0 1 3-15.5A10 10 0 0 1 42 30a7.5 7.5 0 0 1 2 16Z" fill="#fff"/><path d="M20 46a8 8 0 0 1 3-15.5A10 10 0 0 1 42 30a7.5 7.5 0 0 1 2 16Z" fill="none" stroke="#DCE6F2" stroke-width="1.5"/></g>` },
-  { name: 'coffee', bg: 'linear-gradient(135deg,#FBF4EA,#F5EADB)', ink: '#7A5F48', accent: '#B98158', mark: '☕︎',
-    text: 'One task<br/>at a time.',
-    svg: `<g class="steam" fill="none" stroke="#CDB59C" stroke-width="2.2" stroke-linecap="round"><path d="M22 22c-3-4 3-6 0-10"/><path d="M30 22c-3-4 3-6 0-10" style="animation-delay:.6s"/><path d="M38 22c-3-4 3-6 0-10" style="animation-delay:1.2s"/></g>
-      <path d="M14 27h32v12a10 10 0 0 1-10 10H24a10 10 0 0 1-10-10Z" fill="#E7C7A6"/><path d="M46 31h3a5 5 0 0 1 0 10h-3" fill="none" stroke="#E7C7A6" stroke-width="3.5"/>
-      <ellipse cx="30" cy="27" rx="16" ry="3" fill="#A87B55"/><ellipse cx="30" cy="54" rx="16" ry="2.5" fill="#EADBC8"/>` },
-  { name: 'night', bg: 'linear-gradient(135deg,#F2EFFB,#E9E5F7)', ink: '#6B5E91', accent: '#9C86D6', mark: '☾',
-    text: 'Rest is part<br/>of the work.',
-    svg: `<g class="bob"><path d="M36 12a18 18 0 1 0 12 30A15 15 0 0 1 36 12Z" fill="#F3D98B"/><circle cx="30" cy="34" r="2" fill="#E7C66E"/><circle cx="37" cy="41" r="1.4" fill="#E7C66E"/></g>
-      <path class="twinkle" d="M14 14l1.5 3.5L19 19l-3.5 1.5L14 24l-1.5-3.5L9 19l3.5-1.5Z" fill="#B9A8EA"/>
-      <path class="twinkle" style="animation-delay:.8s" d="M50 10l1 2.2 2.2.8-2.2.8-1 2.2-1-2.2-2.2-.8 2.2-.8Z" fill="#B9A8EA"/>
-      <circle class="twinkle" style="animation-delay:1.4s" cx="48" cy="50" r="1.6" fill="#B9A8EA"/>` },
-  { name: 'cactus', bg: 'linear-gradient(135deg,#EEF7F0,#E5F2E9)', ink: '#4F7A5B', accent: '#E58FA8', mark: '✿',
-    text: 'Stay sharp,<br/>stay kind.',
-    svg: `<g class="wiggle" style="transform-origin:30px 42px"><rect x="24" y="14" width="12" height="30" rx="6" fill="#7DB88A"/>
-      <path d="M24 30h-4a4 4 0 0 1-4-4v-5a3 3 0 0 1 6 0v3h2" fill="#7DB88A"/><path d="M36 26h3v-4a3 3 0 0 1 6 0v6a4 4 0 0 1-4 4h-5" fill="#7DB88A"/>
-      <circle cx="30" cy="13" r="3.4" fill="#F2A7BB"/><circle cx="30" cy="13" r="1.3" fill="#F6C86B"/></g>
-      <path d="M18 42h24l-3 13H21Z" fill="#E7A98A"/><rect x="16" y="40" width="28" height="5" rx="2" fill="#DB957A"/>` },
-  { name: 'peaks', bg: 'linear-gradient(135deg,#FDF2EA,#FAE7DB)', ink: '#9A6650', accent: '#E58F6B', mark: '▲',
-    text: 'Little by little,<br/>a lot gets done.',
-    svg: `<circle class="rise" cx="40" cy="22" r="7" fill="#F6B98E"/>
-      <path d="M4 52l18-26 10 13 6-7 18 20Z" fill="#D9A08A"/><path d="M22 26l5 7-5-2-4 3Z" fill="#fff" opacity=".8"/>
-      <path d="M22 52l14-16 20 16Z" fill="#C48370"/><path class="drift" d="M8 18h10M12 14h8" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>` },
-  { name: 'tulip', bg: 'linear-gradient(135deg,#FDF0F4,#FAE5EC)', ink: '#A05571', accent: '#E07A9B', mark: '♥',
-    text: 'Bloom at<br/>your own pace.',
-    svg: `<ellipse cx="30" cy="55" rx="13" ry="2.6" fill="#F3D5DF"/>
-      <g class="sway" style="transform-origin:30px 55px"><path d="M30 55V28" stroke="#7DB88A" stroke-width="3" stroke-linecap="round"/>
-      <path d="M30 46c-8-1-12-7-12-12 7 0 11 5 12 12Z" fill="#8CC79A"/>
-      <path d="M20 16c0 10 4 15 10 15s10-5 10-15l-5 4-5-7-5 7Z" fill="#F29BB5"/><path d="M30 13l-5 7 5 11 5-11Z" fill="#E77F9F"/></g>` },
-];
-
-let sceneOffset = 0;
-function sceneIndex() {
-  const now = new Date();
-  const day = Math.floor((now - now.getTimezoneOffset() * 60000) / 86400000);
-  return (day + sceneOffset) % SCENES.length;
-}
-let lastScene = -1;
-function renderFooter(force = false) {
-  const i = sceneIndex();
-  if (i === lastScene && !force) return;
-  lastScene = i;
-  const sc = SCENES[i];
-  const pc = $('#plantCard');
-  pc.dataset.scene = sc.name;
-  pc.style.background = sc.bg;
-  pc.style.setProperty('--ink', sc.ink);
-  pc.style.setProperty('--accent', sc.accent);
-  $('#plantArt').innerHTML = `<svg viewBox="0 0 60 60" aria-hidden="true">${sc.svg}</svg>`;
-  pc.querySelector('.heart').textContent = sc.mark;
-  pc.classList.remove('swap'); void pc.offsetWidth; pc.classList.add('swap');
-  if (S) renderStats();
-}
-// click the footer to peek at the other scenes
-$('#plantCard').addEventListener('click', () => { sceneOffset++; renderFooter(true); });
-
-function floatHearts() {
-  const pc = $('#plantCard');
-  for (let i = 0; i < 5; i++) {
-    const h = document.createElement('span');
-    h.className = 'float-heart';
-    h.textContent = [SCENES[sceneIndex()].mark, '✿', '♡'][i % 3];
-    h.style.left = 60 + Math.random() * 240 + 'px';
-    h.style.bottom = '8px';
-    h.style.animationDelay = i * 120 + 'ms';
-    h.style.fontSize = 12 + Math.random() * 8 + 'px';
-    pc.appendChild(h);
-    setTimeout(() => h.remove(), 1800);
-  }
-}
+function renderFooter() {}
+function floatHearts() {}
 
 // ---------- tabs ----------
 function renderTabs() {
   const nav = $('#tabs');
-  nav.innerHTML = S.categories.map((c) => `
-    <button class="tab ${c.id === S.activeCat ? 'active' : ''}" data-id="${c.id}" draggable="true" title="Drag to reorder · right-click for options">
-      <span class="emoji">${c.icon}</span><span class="name">${esc(c.name)}</span><span class="count"></span>
+  nav.innerHTML = [{id:'@all',name:'Tất cả',icon:''},...S.categories].map((c) => `
+    <button class="tab ${c.id === S.activeCat ? 'active' : ''}" data-id="${c.id}" draggable="${c.id !== '@all'}" title="Chọn danh sách">
+      <span class="emoji">${esc(c.icon)}</span><span class="name">${esc(c.name)}</span><span class="count"></span>
     </button>`).join('') + `<button class="tab add" id="addCat" title="New category">+</button>`;
 
   nav.querySelectorAll('.tab[data-id]').forEach((el) => {
     el.onclick = () => selectCat(el.dataset.id);
-    el.ondblclick = () => renameCat(el.dataset.id);
-    el.oncontextmenu = (e) => { e.preventDefault(); catMenu(el.dataset.id, el); };
+    el.ondblclick = () => { if(el.dataset.id !== '@all') renameCat(el.dataset.id); };
+    el.oncontextmenu = (e) => { e.preventDefault(); if(el.dataset.id !== '@all') catMenu(el.dataset.id, el); };
   });
   $('#addCat').onclick = addCat;
   nav.querySelector('.tab.active')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
@@ -329,7 +201,7 @@ function selectCat(id) {
 }
 
 function addCat() {
-  const c = { id: uid(), name: 'New list', icon: EMOJIS[(S.categories.length + 4) % EMOJIS.length] };
+  const c = { id: uid(), name: 'Danh sách mới', icon: EMOJIS[(S.categories.length + 4) % EMOJIS.length] };
   S.categories.push(c);
   S.activeCat = c.id;
   persist();
@@ -396,9 +268,9 @@ const ICON_X = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>'
 const ICON_CHECK = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
 const STATUS = {
-  todo: { label: 'To do' },
-  progress: { label: 'In progress' },
-  done: { label: 'Completed' },
+  todo: { label: 'Cần làm' },
+  progress: { label: 'Đang làm' },
+  done: { label: 'Đã xong' },
 };
 const STATUS_RANK = { todo: 0, progress: 1 };
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2, none: 3 };
@@ -430,10 +302,17 @@ function statusMenu(anchor, t, after) {
 function taskRow(t, i, still = false) {
   const subsDone = t.subtasks.filter((s) => s.done).length;
   const meta = [];
+  if(t.plannedDate)meta.push(`<span class="mi">Dự kiến ${esc(fmtDate(t.plannedDate))}${t.plannedTime?' · '+esc(t.plannedTime):''}</span>`);
+  if(t.time || t.date) {
+    const overdue = t.date && new Date(t.date + 'T' + (t.time || '23:59')) < new Date() && !t.done;
+    const label = [t.date ? fmtDate(t.date) : '',t.time].filter(Boolean).join(' · ');
+    meta.push(`<span class="mi t-clock ${overdue ? 'overdue' : ''}">${esc(label)}</span>`);
+  }
+  if(t.status === 'progress') meta.push('<span class="mi">Đang làm</span>');
   if (t.priority && t.priority !== 'none') meta.push(`<span class="mi"><span class="pdot" style="background:${PRIORITY[t.priority].color}"></span>${PRIORITY[t.priority].label}</span>`);
   if (t.subtasks.length) meta.push(`<span class="mi">${ICON_SUB}${subsDone}/${t.subtasks.length}</span>`);
   if (t.notes || t.desc) meta.push(`<span class="mi">${ICON_NOTE}</span>`);
-  if (t.date && t.date !== todayISO()) meta.push(`<span class="mi">${esc(fmtDate(t.date))}</span>`);
+
   return `
     <li class="task ${t.status === 'done' ? 'done' : ''} ${t.id === openId ? 'selected' : ''} ${still ? 'still' : ''}" data-id="${t.id}" style="--i:${i}">
       <button class="check" title="Complete">${ICON_CHECK}</button>
@@ -478,19 +357,22 @@ function renderList({ animate = false } = {}) {
   const ul = $('#tasks');
   const all = catTasks();
   if (!all.length) {
-    ul.innerHTML = `<li class="empty"><span class="big">🌱</span>Nothing here yet.<br/>Add your first task below.</li>`;
+    ul.innerHTML = `<li class="empty"><span class="big">🌱</span>Chưa có việc trong mục này.<br/>Thêm công việc ở bên dưới.</li>`;
     return;
   }
   const before = animate ? rowPositions() : null;
-  const active = sortActive(all);
+  const active = agendaView ? all.filter(t=>!t.done).sort((a,b)=>(a.date+(a.time||'99:99')).localeCompare(b.date+(b.time||'99:99'))) : sortActive(all);
   const done = all.filter((t) => t.status === 'done').sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
 
   let html = active.length
-    ? active.map((t, i) => taskRow(t, i, animate)).join('')
-    : `<li class="empty small"><span class="big">🌸</span>All caught up!</li>`;
+    ? active.map((t, i) => {
+      const heading = agendaView && (!i || active[i-1].date !== t.date) ? `<li class="agenda-heading">${esc(fmtDate(t.date))}</li>` : '';
+      return heading + taskRow(t, i, animate);
+    }).join('')
+    : `<li class="empty small"><span class="big">🌸</span>Đã hoàn thành mọi việc.</li>`;
   if (done.length) {
     html += `<li class="done-toggle ${S.showDone ? 'open' : ''}"><button id="doneToggle">
-      <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>Completed<span class="n">${done.length}</span></button></li>`;
+      <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>Đã hoàn thành<span class="n">${done.length}</span></button></li>`;
     if (S.showDone) html += done.map((t, i) => taskRow(t, i, animate)).join('');
   }
   ul.innerHTML = html;
@@ -591,7 +473,7 @@ function burst(el) {
 function addTask(text) {
   const { title, time, priority } = parseQuickAdd(text);
   const t = {
-    id: uid(), catId: S.activeCat, title, time, status: 'todo', done: false, date: todayISO(),
+    id: uid(), catId: S.activeCat === '@all' ? S.categories[0].id : S.activeCat, title, time, status: 'todo', done: false, date: todayISO(),
     desc: '', priority, tags: [], subtasks: [], notes: '', createdAt: Date.now(),
   };
   S.tasks.push(t);
@@ -669,6 +551,7 @@ $('#addForm').addEventListener('submit', (e) => {
 let animating = Promise.resolve();
 
 async function openDetail(id) {
+  await window.closeDeskAgy?.();
   openId = id;
   document.querySelectorAll('.task').forEach((el) => el.classList.toggle('selected', el.dataset.id === id));
   fillDetail();
@@ -717,21 +600,24 @@ function fillDetail() {
   $('#dTitle').value = t.title;
   $('#dDesc').value = t.desc || '';
   $('#dNotes').value = t.notes || '';
+  $('#dImportant').checked=!!t.important;
+  $('#dNotify').checked=t.notify!==false;
+  $('#dPlanDate').value=t.plannedDate||'';$('#dPlanTime').value=t.plannedTime||'';$('#dPlanMinutes').value=t.durationMinutes||45;
   requestAnimationFrame(autosizeAll);
   renderStatus();
   renderDateTime();
   renderPriority();
   renderTags();
   renderSubs();
-  $('#dCreated').textContent = 'Created ' + new Date(t.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  $('#dCreated').textContent = 'Tạo lúc ' + new Date(t.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
 function renderDateTime() {
   const t = task(openId);
-  $('#dDateLabel').textContent = t.date ? fmtDate(t.date) : 'Empty';
+  $('#dDateLabel').textContent = t.date ? fmtDate(t.date) : 'Ch?a ??t';
   $('#dDateBtn').classList.toggle('empty', !t.date);
   $('#dDateBtn').classList.toggle('overdue', !!t.date && !t.done && t.date < todayISO());
-  $('#dTimeLabel').textContent = t.time ? fmtTime(t.time) : 'Empty';
+  $('#dTimeLabel').textContent = t.time ? fmtTime(t.time) : 'Ch?a ??t';
   $('#dTimeBtn').classList.toggle('empty', !t.time);
 }
 
@@ -801,6 +687,12 @@ function bindText(sel, key, after) {
 bindText('#dTitle', 'title', () => updateRow(openId));
 bindText('#dDesc', 'desc', () => updateRow(openId));
 bindText('#dNotes', 'notes', () => updateRow(openId));
+$('#dImportant').onchange=e=>{const t=task(openId);if(t){t.important=e.target.checked;persist();}};
+$('#dNotify').onchange=e=>{const t=task(openId);if(t){t.notify=e.target.checked;persist();}};
+for(const selector of ['#dPlanDate','#dPlanTime','#dPlanMinutes'])$(selector).onchange=()=>{
+  const t=task(openId);if(!t)return;
+  t.plannedDate=$('#dPlanDate').value;t.plannedTime=t.plannedDate?$('#dPlanTime').value:'';t.durationMinutes=Math.max(15,Math.min(180,Math.round((Number($('#dPlanMinutes').value)||45)/15)*15));t.planSource='manual';persist();updateRow(openId);
+};
 $('#dTitle').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#dDesc').focus(); } });
 
 const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -835,7 +727,7 @@ function datePicker(anchor, value, onPick) {
       <div class="cal-grid ${dir < 0 ? 'from-left' : dir > 0 ? 'from-right' : ''}">
         ${['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((w) => `<span class="wd">${w}</span>`).join('')}${days}
       </div>
-      <div class="pick-foot"><button class="clear">Clear</button></div>`;
+      <div class="pick-foot"><button class="clear">X?a</button></div>`;
     wrap.querySelectorAll('[data-d]').forEach((b) => b.onclick = () => { closeMenu(); onPick(b.dataset.d); });
     wrap.querySelectorAll('[data-nav]').forEach((b) => b.onclick = () => { const n = +b.dataset.nav; view.setMonth(view.getMonth() + n); draw(n); });
     wrap.querySelector('.clear').onclick = () => { closeMenu(); onPick(''); };
@@ -853,7 +745,7 @@ function timePicker(anchor, value, onPick) {
   wrap.innerHTML = `
     <div class="cal-quick">${['09:00', '12:00', '15:00', '18:00'].map((v) => `<button data-t="${v}">${fmtTime(v).replace(':00', '')}</button>`).join('')}</div>
     <div class="tp-list">${slots.map((v) => `<button class="slot ${v === value ? 'sel' : ''}" data-t="${v}">${fmtTime(v)}</button>`).join('')}</div>
-    <div class="pick-foot"><button class="clear">Clear</button></div>`;
+    <div class="pick-foot"><button class="clear">X?a</button></div>`;
   wrap.querySelectorAll('[data-t]').forEach((b) => b.onclick = () => { closeMenu(); onPick(b.dataset.t); });
   wrap.querySelector('.clear').onclick = () => { closeMenu(); onPick(''); };
   showMenu(anchor, [{ custom: () => wrap }]);
@@ -966,13 +858,14 @@ function toast(msg, undo) {
 }
 
 // ---------- window buttons ----------
-async function setPinUI(on) { $('#btnPin').classList.toggle('on', on); $('#btnPin').title = on ? 'Unpin (stop keeping on top)' : 'Keep on top'; }
+async function setPinUI(on) { $('#btnPin').classList.toggle('on', on); $('#btnPin').title = on ? 'Bỏ ghim' : 'Luôn ở trên'; }
 $('#btnPin').onclick = async () => { const on = await api.togglePin(); setPinUI(on); toast(on ? '📌 Pinned — stays above other apps' : 'Unpinned — other apps can cover it'); };
 api.onPinChanged(setPinUI);
 $('#btnClose').onclick = () => api.hide();
 
 let mini = false;
 $('#btnMini').onclick = async () => {
+  await window.closeDeskAgy?.();
   if (!mini) await closeDetail();
   mini = !mini;
   if (mini) { document.body.classList.add('mini'); await api.setMini(true); }
@@ -983,30 +876,30 @@ $('#btnMini').onclick = async () => {
     : '<svg viewBox="0 0 24 24"><path d="M5 12h14" stroke-width="2" stroke-linecap="round"/></svg>';
 };
 $('.header').addEventListener('dblclick', (e) => { if (!e.target.closest('button')) $('#btnMini').click(); });
+api.onRestore?.(() => { if(mini) $('#btnMini').click(); });
 
-$('#btnMenu').onclick = async (e) => {
+$('#btnMenu').onclick = async e => {
   const auto = await api.getAutoStart();
-  const pinned = $('#btnPin').classList.contains('on');
-  showMenu(e.currentTarget, [
-    { icon: '🚀', label: 'Start with Windows', checked: auto, onClick: async () => { const v = await api.setAutoStart(!auto); toast(v ? 'Task Nest will open when you start your laptop' : 'Won’t open at startup'); } },
-    { icon: '📌', label: 'Always on top', checked: pinned, onClick: () => $('#btnPin').click() },
-    { sep: true },
-    { icon: '🧹', label: 'Clear completed in this list', onClick: clearCompleted },
-    { icon: '📁', label: 'Open data & backups folder', onClick: () => api.openData() },
-    { sep: true },
-    { label: 'Quick add tips', header: true },
-    { icon: '⏰', label: '“Gym 6pm” sets a time', onClick: () => $('#addInput').focus() },
-    { icon: '🚩', label: '“Pay rent !high” sets priority', onClick: () => $('#addInput').focus() },
-    { sep: true },
-    { icon: '👋', label: 'Quit Task Nest', danger: true, onClick: () => api.quit() },
+  const notifications=await api.getNotifications();
+  showMenu(e.currentTarget,[
+    {label:'Nhắc lịch đúng giờ',checked:notifications.enabled,onClick:async()=>{const result=await api.configureNotifications({enabled:!notifications.enabled});toast(result.ok?(!notifications.enabled?'Đã bật nhắc lịch':'Đã tắt nhắc lịch'):result.error);}},
+    {label:'Âm thanh thông báo',checked:notifications.sound,onClick:async()=>{await api.configureNotifications({sound:!notifications.sound});}},
+    {label:'Thử thông báo Windows',onClick:async()=>{const result=await api.testNotification();toast(result.ok?'Đã gửi thông báo Windows':result.error);}},
+    {sep:true},
+    {label:'Mở cùng Windows',checked:auto,onClick:async()=>{await api.setAutoStart(!auto);toast(!auto?'Đã bật mở cùng Windows':'Đã tắt mở cùng Windows');}},
+    {sep:true},
+    {label:'Dọn việc đã hoàn thành',onClick:clearCompleted},
+    {label:'Mở thư mục dữ liệu',onClick:()=>api.openData()},
+    {sep:true},
+    {label:'Thoát Desknote',danger:true,onClick:()=>api.quit()}
   ]);
 };
 
 function clearCompleted() {
-  const removed = S.tasks.filter((t) => t.catId === S.activeCat && t.done);
+  const removed = catTasks().filter(t=>t.done);
   if (!removed.length) return toast('Nothing to clear ✨');
   const before = S.tasks.slice();
-  S.tasks = S.tasks.filter((t) => !(t.catId === S.activeCat && t.done));
+  S.tasks = S.tasks.filter(t => !removed.some(r=>r.id===t.id));
   if (openId && !task(openId)) closeDetail();
   persist(); renderList(); renderStats();
   toast(`Cleared ${removed.length} completed`, () => { S.tasks = before; persist(); renderList(); renderStats(); });
@@ -1021,6 +914,34 @@ document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') { e.preventDefault(); $('#addInput').focus(); }
 });
 
+function setView(agenda) {
+  agendaView=agenda;
+  $('#viewAll').classList.toggle('active',!agenda);
+  $('#viewAgenda').classList.toggle('active',agenda);
+  renderGreeting(); renderList(); renderStats();
+}
+$('#viewAll').onclick=()=>setView(false);
+$('#viewAgenda').onclick=()=>setView(true);
+let refreshTimer;
+let lastTyped=0;
+document.addEventListener('input',()=>{lastTyped=Date.now();});
+async function refreshExternal() {
+  if(!S || Date.now()-lastTyped<900) {refreshTimer=setTimeout(refreshExternal,1000);return;}
+  // Flush local edits first; main merges only edited fields into the current store.
+  if(saveTimer) { clearTimeout(saveTimer); saveTimer=null; if(api.saveSync && !api.saveSync(S)) return toast('Không lưu được thay đổi cục bộ.'); }
+  const result=await api.load();
+  if(result.status!=='ok')return toast('Không đọc được cập nhật.');
+  S=result.data;
+  if(S.activeCat!=='@all'&&!cat(S.activeCat))S.activeCat='@all';
+  if(openId && !task(openId))await closeDetail();
+  renderTabs(); renderList(); renderStats();
+  if(openId)fillDetail();
+  window.scheduleChanged?.();
+  $('#syncLabel').textContent='Đã cập nhật '+new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
+}
+api.onExternalChange?.(()=>{clearTimeout(refreshTimer);refreshTimer=setTimeout(refreshExternal,150);});
+$('.card').insertAdjacentHTML('beforeend','<footer class="desk-footer"><span id="syncLabel">Lưu trên máy</span><span>Alt + Shift + T</span></footer>');
+
 // ---------- boot ----------
 (async function init() {
   if (!api) return; // main process will reload the window once the bridge is ready
@@ -1031,12 +952,12 @@ document.addEventListener('keydown', (e) => {
     await new Promise((r) => setTimeout(r, 500 * (i + 1)));
   }
   if (res.status === 'error') {
-    $('#tasks').innerHTML = `<li class="empty"><span class="big">🫣</span>Couldn't open your tasks.<br/>They're safe — restart Task Nest to try again.</li>`;
+    $('#tasks').innerHTML = `<li class="empty"><span class="big">🫣</span>Couldn't open your tasks.<br/>They're safe — restart Desknote to try again.</li>`;
     return; // do NOT overwrite the file with anything
   }
   S = res.status === 'ok' ? res.data : seed();
   canSave = true;
-  if (!cat(S.activeCat)) S.activeCat = S.categories[0].id;
+  if (S.activeCat !== '@all' && !cat(S.activeCat)) S.activeCat = S.categories[0].id;
   for (const t of S.tasks) {
     if (!STATUS[t.status]) t.status = t.done ? 'done' : 'todo';
     t.done = t.status === 'done';
@@ -1050,5 +971,6 @@ document.addEventListener('keydown', (e) => {
   renderList();
   renderStats();
   setPinUI(await api.getPin());
+  window.scheduleChanged?.();
   setInterval(() => { renderGreeting(); renderFooter(); }, 60_000);
 })();

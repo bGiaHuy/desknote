@@ -1,0 +1,61 @@
+const assert=require('assert/strict'),fs=require('fs'),os=require('os'),path=require('path');
+const {Alarm}=require('./alarm');
+const dir=fs.mkdtempSync(path.join(os.tmpdir(),'desknote-alarm-'));
+let now=1000,plays=0,stops=0,shows=0;
+const deps={clock:()=>now,play:()=>{plays++;return {stop:()=>stops++};},show:()=>shows++};
+(async()=>{
+  const alarm=new Alarm(dir,deps);
+  assert.throws(()=>alarm.set(0));assert.throws(()=>alarm.set(1.5));assert.throws(()=>alarm.set(1441));
+  alarm.set(20);assert.equal(alarm.status().at,1201000);alarm.tick();assert.equal(plays,0);
+  now=1201000;alarm.tick();assert.equal(plays,1);assert.equal(shows,1);assert.equal(alarm.status().ringing,true);
+  now+=3600000;alarm.tick();assert.equal(plays,1,'Looping playback continues until an explicit stop; do not start duplicate players.');
+  alarm.close();assert.equal(stops,1);
+  const restored=new Alarm(dir,deps);restored.tick();assert.equal(plays,2,'A ringing alarm resumes after app restart.');
+  restored.stop();assert.equal(stops,2);restored.tick();assert.equal(plays,2);assert.equal(restored.status().at,null);
+  assert.equal(new Alarm(dir,deps).status().ringing,false);
+  let dailyClock=1000,dailyPlays=0;
+  const wakeups=()=>[{sourceId:'wake',at:61000},{sourceId:'wake',at:86461000}];
+  const daily=new Alarm(dir,{show:()=>{},play:()=>{dailyPlays++;return {stop:()=>{}};},clock:()=>dailyClock,wakeups});
+  daily.follow('wake');assert.equal(daily.status().at,61000);
+  assert.throws(()=>daily.follow('missing'));
+  dailyClock=61000+3600000;daily.tick();assert.equal(dailyPlays,1,'A missed wake-up rings on resume.');
+  daily.stop(true);assert.equal(daily.status().at,86461000,'Stopping today keeps the next daily wake-up armed.');
+  daily.tick();assert.equal(dailyPlays,1,'Do not repeat the stopped occurrence.');
+  daily.stop();assert.equal(daily.status().routineId,undefined,'CLI stop can disable the routine alarm entirely.');
+  dailyClock=1000;daily.follow('wake');daily.once(31000);daily.tick();assert.equal(daily.status().at,31000);
+  dailyClock=31000;daily.tick();assert.equal(daily.status().ringing,true);
+  daily.stop(true);assert.equal(daily.status().at,61000,'Nap alarm preserves the morning routine.');
+  assert.throws(()=>daily.once(dailyClock));assert.throws(()=>daily.once(dailyClock+86400001));daily.stop();
+  const { _electron:electron }=require('playwright');
+  const env={...process.env,DESKNOTE_DATA_DIR:dir,DESKNOTE_TEST:'1'};delete env.ELECTRON_RUN_AS_NODE;
+  let app;
+  try{
+    const harness=path.join(dir,'harness.cjs');
+    fs.writeFileSync(harness,`const {app,BrowserWindow,screen,ipcMain}=require('electron');
+      const {Alarm,createAlarmWindow}=require(${JSON.stringify(path.join(__dirname,'alarm'))});
+      app.whenReady().then(()=>{
+        global.alarmTest={plays:0,stops:0,desk:false};
+        const ui=createAlarmWindow(BrowserWindow,screen,ipcMain,()=>global.wakeAlarm.stop(),()=>{global.alarmTest.desk=true;});
+        global.wakeAlarm=new Alarm(${JSON.stringify(dir)},{show:()=>ui.show(),hide:()=>ui.hide(),clock:()=>1000,play:()=>{global.alarmTest.plays++;return {stop:()=>global.alarmTest.stops++};}});
+        global.wakeAlarm.file=${JSON.stringify(path.join(dir,'test-alarm.json'))};
+        global.ring=()=>{global.wakeAlarm.clock=()=>1000;global.wakeAlarm.set(1);global.wakeAlarm.clock=()=>61000;global.wakeAlarm.tick();};
+        global.ring();
+      });app.on('window-all-closed',()=>{});`);
+    app=await electron.launch({args:[harness],env});let page=await app.firstWindow();
+    await page.waitForSelector('#stop');assert.equal(await page.locator('#desk').textContent(),"I'm at my desk");
+    await app.evaluate(({ipcMain})=>ipcMain.emit('alarm:stop',{sender:{}}));
+    assert.equal(await app.evaluate(()=>global.alarmTest.stops),0,'Other windows cannot stop the wake-up alarm.');
+    await page.locator('#desk').click();
+    await app.evaluate(()=>new Promise(resolve=>setTimeout(resolve,50)));
+    assert.equal(await app.evaluate(()=>global.alarmTest.stops),1);assert.equal(await app.evaluate(()=>global.alarmTest.desk),true);
+    await app.evaluate(()=>global.ring());
+    page=app.windows().find(p=>p.url().startsWith('data:'));if(!page)page=await app.waitForEvent('window');
+    await page.waitForSelector('#stop');await page.locator('#stop').click();
+    await app.evaluate(()=>new Promise(resolve=>setTimeout(resolve,50)));
+    assert.equal(await app.evaluate(()=>global.alarmTest.stops),2);assert.equal(await app.evaluate(()=>global.wakeAlarm.status().at),null);
+  }finally{await app?.close();}
+  console.log('PASS: persistent looping alarm, duration validation, explicit stop, restart/resume, isolated IPC, and both real alarm-window buttons. Audio mocked; no real alarm played.');
+})().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>{
+  if(!path.resolve(dir).startsWith(path.resolve(os.tmpdir())+path.sep))throw Error('Unsafe test cleanup path.');
+  fs.rmSync(dir,{recursive:true,force:true});
+});

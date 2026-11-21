@@ -1,0 +1,59 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "reply",
+    "operations"
+  ],
+  "properties": {
+    "reply": {
+      "type": "string"
+    },
+    "operations": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command",
+          "id",
+          "fieldsJson",
+          "date",
+          "done"
+        ],
+        "properties": {
+          "command": {
+            "type": "string",
+            "enum": [
+              "add",
+              "update",
+              "delete",
+              "routine.add",
+              "routine.update",
+              "routine.delete",
+              "routine.check",
+              "event.add",
+              "event.update",
+              "event.delete",
+              "routine.override",
+              "routine.clear-override"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "fieldsJson": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "done": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

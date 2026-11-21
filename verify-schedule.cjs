@@ -1,0 +1,105 @@
+const assert=require('node:assert/strict');
+const fs=require('fs');const os=require('os');const path=require('path');
+const {_electron:electron}=require('playwright');
+const {execFileSync}=require('child_process');
+const {Store,merge}=require('./store');const C=require('./src/schedule-core');const {AgyBridge,parseAgyResult}=require('./agy-bridge');
+const temp=fs.mkdtempSync(path.join(os.tmpdir(),'desknote-calendar-'));
+const store=new Store(temp);store.ensure();
+const run=req=>store.command(req);
+const weekday=C.weekday(C.today());
+const routine=run({command:'routine.add',fields:{title:'Routine test',time:'07:10',days:[weekday]}});
+assert.equal(C.occurrences(store.read(),C.today()).filter(x=>x.kind==='routine').length,1);
+run({command:'routine.check',id:routine.id,date:C.today(),done:true});
+assert(C.occurrences(store.read(),C.today()).find(x=>x.sourceId===routine.id).done);
+assert(!C.occurrences(store.read(),C.addDays(C.today(),7)).find(x=>x.sourceId===routine.id).done);
+const milestone=run({command:'event.add',fields:{title:'Annual test',date:'2024-02-29',important:true,repeat:'yearly'}});
+assert.equal(C.nextEvent(milestone,'2026-03-01'),'2028-02-29');
+assert.equal(C.daysUntil('2027-01-01','2026-12-31'),1);
+assert.equal(C.daysUntil('2026-03-09','2026-03-08'),1);
+assert.equal(C.validDate('2026-02-29'),false);assert.equal(C.validDate('2026-99-01'),false);
+const before=store.read();
+assert.throws(()=>run({command:'batch',operations:[{command:'event.add',fields:{title:'Should roll back',date:'2026-12-01'}},{command:'routine.add',fields:{title:'Bad',time:'25:00'}}]}));
+assert.deepEqual(store.read(),before);
+const local=structuredClone(before),external=structuredClone(before);local.routines[0].title='UI edit';external.events[0].notes='CLI edit';
+const mixed=merge(before,local,external);assert.equal(mixed.routines[0].title,'UI edit');assert.equal(mixed.events[0].notes,'CLI edit');
+async function checkAgy(){
+  assert.deepEqual(parseAgyResult({status:'SUCCESS',structured_output:{reply:'ok',operations:[]}}),{reply:'ok',operations:[]});
+  assert.throws(()=>parseAgyResult({status:'SUCCESS',response:'no output produced'}));
+  assert.throws(()=>parseAgyResult({status:'ERROR',structured_output:{reply:'ok',operations:[]}}));
+  const {EventEmitter}=require('events');const {PassThrough}=require('stream');
+  const transport=new AgyBridge(store,{spawnProcess:(exe,args,options)=>{
+    assert(exe.endsWith('agy.exe'));assert(!args.some(a=>a.includes('codex')));assert(!args.includes('--model'));assert.equal(options.windowsHide,true);
+    const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.kill=()=>child.emit('close',1);
+    let input='';child.stdin.on('data',chunk=>input+=chunk);child.stdin.on('finish',()=>{
+      assert.equal(JSON.parse(input).message.content,'Transport probe');
+      child.stdout.write(JSON.stringify({event:'init'})+'\n');
+      const result=JSON.stringify({event:'result',result:{status:'SUCCESS',structured_output:{reply:'transport ok',operations:[]}}});
+      child.stdout.write(result.slice(0,40));child.stdout.write(result.slice(40)+'\n');child.emit('close',0);
+    });return child;
+  }});
+  assert.equal((await transport.runCli('Transport probe')).reply,'transport ok');
+  const bridge=new AgyBridge(store,{runner:async()=>({reply:'Đã chuẩn bị mốc.',operations:[{command:'event.add',id:'',date:'',done:false,fieldsJson:JSON.stringify({title:'Mock AGY event',date:'2026-12-31',important:true})}]})});
+  assert.equal((await bridge.send('thêm mốc')).changes,1);
+  const invalid=new AgyBridge(store,{runner:async()=>({reply:'bad',operations:[{command:'bad',fieldsJson:'{}'}]})});
+  const stable=store.read();await assert.rejects(()=>invalid.send('invalid'));assert.deepEqual(store.read(),stable);
+}
+let app;
+(async()=>{
+  await checkAgy();
+  const env={...process.env,DESKNOTE_DATA_DIR:temp,DESKNOTE_TEST:'1'};delete env.ELECTRON_RUN_AS_NODE;
+  const cli=(...args)=>JSON.parse(execFileSync(process.execPath,[path.join(__dirname,'cli.js'),...args],{env,encoding:'utf8',windowsHide:true}));
+  app=await electron.launch({args:[__dirname],env});const page=await app.firstWindow();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.waitForSelector('.calendar-day',{state:'attached'});
+  assert(await page.locator('#currentSession').isVisible());
+  assert(await page.locator('#fold-month').isHidden());await page.locator('[aria-controls="fold-month"]').click();await page.locator('[aria-controls="fold-agenda"]').click();
+assert.equal(await page.locator('.calendar-day').count(),42);
+  const added=cli('event.add','UI countdown test','--date',C.addDays(C.today(),5),'--important','true');
+  await page.waitForFunction(title=>[...document.querySelectorAll('.countdown-item')].some(x=>x.textContent.includes(title)),'UI countdown test');
+  assert.equal(cli('milestones').find(x=>x.id===added.id).remaining,5);
+  const routineCli=cli('routine.add','CLI routine live','--time','08:30','--end-time','09:00','--days',String(weekday));
+  await page.waitForFunction(title=>document.querySelector('#routineToday').textContent.includes(title),'CLI routine live');
+  assert((await page.locator(`#routineToday .schedule-row[data-id="${routineCli.id}"] .schedule-time`).textContent()).includes('09:00'));
+  await page.locator(`#routineToday [data-check][data-id="${routineCli.id}"]`).click();
+  await page.waitForFunction(id=>document.querySelector(`#routineToday [data-check][data-id="${id}"]`).getAttribute('aria-pressed')==='true',routineCli.id);
+  assert(cli('list','--json').routineChecks.some(x=>x.routineId===routineCli.id));
+  await page.locator('#addRoutine').click();
+  await page.locator('#sTitle').fill('Sinh hoạt từ giao diện');await page.locator('#sTime').fill('18:30');
+  await page.locator('#scheduleSave').click();await page.waitForSelector('#scheduleEditor[hidden]',{state:'attached'});
+  assert(cli('routines').some(x=>x.title==='Sinh hoạt từ giao diện'));
+  await page.locator('#calendarGrid [data-date="'+C.addDays(C.today(),5)+'"]').click();
+  assert((await page.locator('#calendarAgenda').textContent()).includes('UI countdown test'));
+  const originalMonth=await page.locator('#calendarMonth').textContent();await page.locator('#calendarNext').click();assert.notEqual(await page.locator('#calendarMonth').textContent(),originalMonth);
+  await page.locator('#calendarToday').click();await page.locator('#scheduleAll').click();assert((await page.locator('#calendarAgenda').textContent()).includes('UI countdown test'));
+  await page.locator('#btnMini').click();assert(await page.locator('body').evaluate(x=>x.classList.contains('mini')));
+  cli('show');await page.waitForFunction(()=>!document.body.classList.contains('mini'));
+  await page.locator('#viewAgy').click();await page.waitForSelector('body.agy-open');
+  assert(await page.locator('#agyInput').isVisible());await page.locator('#agyClose').click();
+  await page.locator('#openReviews').click();await page.waitForSelector('#reviewProactive');assert(await page.locator('#reviewAdapt').isChecked());assert(await page.locator('#reviewProactive').isChecked());assert(await page.locator('#undoReviewRoutines').isDisabled());await page.locator('#reviewProactive').uncheck();await page.locator('#saveReviews').click();assert.equal(cli('reviews.status').settings.proactive,false);await page.locator('#closeReviews').click();
+  await page.screenshot({path:path.join(__dirname,'artifacts','calendar.png')});
+  await page.locator('#focusTasks').click();assert(await page.locator('#scheduleRoot').isHidden());await page.reload();await page.waitForSelector('#focusTasks');assert(await page.locator('#scheduleRoot').isHidden(),'Focus preference survives reload');await page.locator('#focusTasks').click();assert(await page.locator('#scheduleRoot').isVisible());
+  assert(await page.evaluate(()=>getComputedStyle(document.querySelector('.list-col')).overflowY==='auto'),'Content must scroll as one area');
+  assert.deepEqual(errors,[]);
+  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().forEach(w=>w.destroy()));
+  const replacement=app.waitForEvent('window');
+  assert.equal(cli('show').visible,true);
+  const restored=await replacement;await restored.waitForSelector('#tasks');
+  assert.equal(cli('show').visible,true);
+  await app.close();app=null;
+  if(process.platform==='win32'&&!process.env.DESKNOTE_SKIP_NATIVE){
+    env.DESKNOTE_NATIVE_TEST='1';app=await electron.launch({args:[__dirname],env});const nativePage=await app.firstWindow();
+    const reportFile=path.join(temp,'desktop-host.json');
+    const report=()=>{try{return JSON.parse(fs.readFileSync(reportFile,'utf8'));}catch{return {};}};
+    await nativePage.waitForTimeout(600);assert.equal(report().status,'attached');
+    const original=report().bounds;
+    for(let i=0;i<2;i++){
+      await nativePage.locator('#btnMini').click();await nativePage.waitForTimeout(300);assert.equal(report().bounds.height,78);
+      cli('show');await nativePage.waitForFunction(()=>!document.body.classList.contains('mini'));await nativePage.waitForTimeout(300);
+      assert.equal(report().bounds.x,original.x);assert.equal(report().bounds.y,original.y);assert.equal(report().bounds.height,original.height);
+    }
+    await nativePage.locator('#viewAgy').click();await nativePage.waitForSelector('body.agy-open');await nativePage.waitForTimeout(300);
+    assert.equal(report().bounds.width,780);
+    await nativePage.locator('#agyClose').click();await nativePage.waitForTimeout(400);assert.equal(report().bounds.x,original.x);assert.equal(report().bounds.width,400);
+    await app.close();app=null;
+  }
+  console.log('PASS: recurrence/checks per day, leap years, countdowns, atomic rollback, merge, AGY bridge with mock runner, live calendar/UI CRUD, mini restore, native desktop coordinates.');
+})().catch(async error=>{console.error(error);if(app)await app.close();process.exitCode=1;});

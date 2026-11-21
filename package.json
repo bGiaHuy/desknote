@@ -1,23 +1,25 @@
 {
-  "name": "task-nest",
-  "productName": "Task Nest",
+  "name": "desknote",
+  "productName": "Desknote",
   "version": "1.0.0",
-  "description": "A cute, Notion-style task widget that lives on your desktop",
+  "description": "Local desktop tasks and agenda, customized from Task Nest",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win nsis",
-    "icon": "electron build/make-icon.js"
+    "icon": "electron build/make-icon.js",
+    "test": "node verify.cjs && node verify-schedule.cjs && node verify-notifications.cjs && node verify-reminder-window.cjs && node verify-reviews.cjs && node verify-adaptive.cjs && node verify-gmail.cjs && node verify-alarm.cjs"
   },
   "author": "Task Nest",
   "license": "MIT",
   "devDependencies": {
     "electron": "^44.4.5",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "playwright": "^1.65.0"
   },
   "build": {
-    "appId": "com.tasknest.widget",
-    "productName": "Task Nest",
+    "appId": "local.desknote",
+    "productName": "Desknote",
     "copyright": "Task Nest",
     "directories": {
       "output": "dist",
@@ -28,7 +30,24 @@
       "preload.js",
       "src/**/*",
       "build/icon.png",
-      "package.json"
+      "package.json",
+      "store.js",
+      "cli.js",
+      "desktop_host.py",
+      "agy-bridge.js",
+      "agy-response.schema.json",
+      "notification-engine.js",
+      "reminder-window.js",
+      "alarm.js",
+      "alarm-preload.js",
+      "review-engine.js",
+      "work-planner.js",
+      "inbox-client.js",
+      "inbox-reader.js",
+      "gmail-reader.js",
+      "inbox-mcp.js",
+      "read-zalo-review.py",
+      "routine-policy.js"
     ],
     "win": {
       "target": [
@@ -46,10 +65,17 @@
       "perMachine": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Task Nest",
+      "shortcutName": "Desknote",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false,
-      "artifactName": "Task-Nest-Setup-${version}.${ext}"
+      "artifactName": "Desknote-Setup-${version}.${ext}"
     }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
+  },
+  "bin": {
+    "desknote": "cli.js"
   }
 }

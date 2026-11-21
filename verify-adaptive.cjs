@@ -1,0 +1,24 @@
+const assert=require('assert/strict'),fs=require('fs'),os=require('os'),path=require('path');
+const {Store,seed}=require('./store');const {ReviewEngine}=require('./review-engine');const C=require('./src/schedule-core');
+const at=s=>new Date('2026-11-09T'+s+':00').getTime();
+const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'desknote-adaptive-')));
+const data=seed();data.tasks=[];data.events=[];data.routines=[{id:'lunch',title:'Lunch',routineType:'lunch',time:'12:30',endTime:'13:00',days:[0,1,2,3,4,5,6],enabled:true,notes:''},{id:'sleep',title:'Sleep',routineType:'sleep',time:'22:30',endTime:'06:30',days:[0,1,2,3,4,5,6],enabled:true,notes:''}];store.write(data);
+let now=at('09:00');const engine=new ReviewEngine(store,{clock:()=>now});
+const op=(command,id,fields,date='2026-11-09')=>({command,id,date,fieldsJson:JSON.stringify(fields)});
+const apply=operations=>engine.apply({reply:'Adjusted.',operations},store.read(),[],now);
+apply([op('routine.override','lunch',{time:'12:00',endTime:'12:30',reason:'Leave for appointment.'})]);
+assert.equal(store.read().routines[0].time,'12:30');assert.equal(C.occurrences(store.read(),'2026-11-09').find(x=>x.sourceId==='lunch').time,'12:00');assert.equal(C.occurrences(store.read(),'2026-11-10').find(x=>x.sourceId==='lunch').time,'12:30');
+engine.state.slots.test={startedAt:now,adaptations:engine.lastAdaptations};assert.equal(engine.undoRoutineChanges().undone,1);assert.equal(store.read().routineOverrides.length,0);
+for(const bad of [op('routine.override','sleep',{time:'23:30',endTime:'06:30',reason:'More work'}),op('routine.override','lunch',{skip:true,reason:'Busy'}),op('routine.update','lunch',{time:'12:00',endTime:'12:30',reason:'Permanent'})])assert.throws(()=>apply([bad]));
+store.command({command:'event.add',fields:{title:'Exam',date:'2026-11-09',time:'12:00',endTime:'12:30'}});
+assert.throws(()=>apply([op('routine.override','lunch',{time:'12:00',endTime:'12:30',reason:'Conflict'})]));
+store.command({command:'routine.update',id:'lunch',fields:{locked:true}});assert.throws(()=>apply([op('routine.override','lunch',{time:'13:00',endTime:'13:30',reason:'Locked'})]));
+engine.configure({adaptRoutines:false});assert.throws(()=>apply([op('routine.add','',{title:'Walk',time:'17:00',endTime:'17:30',routineType:'exercise',reason:'Rest'})]));engine.configure({adaptRoutines:true});
+apply([op('routine.add','',{title:'Walk',time:'17:00',endTime:'17:30',routineType:'exercise',reason:'Rest'})]);assert.equal(store.read().routines.at(-1).id,engine.lastAdaptations[0].id);
+engine.state.slots.add={startedAt:now+1,adaptations:engine.lastAdaptations};assert.equal(engine.undoRoutineChanges().undone,1);
+// Scheduler only invokes a review inside waking hours, with bounded model attempts.
+let runs=[];engine.run=(slot,time)=>{runs.push(slot);return Promise.resolve();};engine.state.slots={};engine.state.nextProactiveAt=now;engine.tick(now);assert.deepEqual(runs,['proactive']);engine.tick(now+1000);assert.equal(runs.length,1);
+engine.state.nextProactiveAt=now;engine.state.slots.recent={slot:'proactive',modelUsed:true,startedAt:now-10*60000};engine.tick(now);assert.equal(runs.length,1);
+engine.state.slots=Object.fromEntries(Array.from({length:6},(_,i)=>[i,{slot:'proactive',modelUsed:true,startedAt:at('06:30')+i*1000}]));engine.state.nextProactiveAt=now;engine.tick(now);assert.equal(runs.length,1);
+engine.state.nextProactiveAt=at('13:40');engine.tick(at('13:40'));assert.equal(runs.at(-1),'midday','Scheduled summary remains available after proactive quota.');
+console.log('PASS: daily overrides, next-day defaults, undo, sleep/meal/lock/conflict protection, repeating-owner requirement, stable routine IDs, proactive interval/cap and reserved summaries.');
