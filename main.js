@@ -23,7 +23,7 @@ const alarm=new Alarm(DATA_DIR,{show:()=>alarmWindow.show(),hide:()=>alarmWindow
 const reviewModel=new AgyBridge(store);
 const reviews=new ReviewEngine(store,{model:reviewModel,isBusy:()=>agyBridge.busy,
   changed:()=>{if(win&&!win.isDestroyed()){win.webContents.send('review:updated');win.webContents.send('data:external-change');}},
-  notify:async report=>{if(reminders.settings.enabled)await sendDesktopNotification({title:report.status==='failed'?'desknote · Chưa rà tin được':'desknote · Đã rà tin và xếp việc',body:report.summary.slice(0,220),silent:!reminders.settings.sound,entries:[]});}
+  notify:async report=>{if(reminders.settings.enabled)await sendDesktopNotification({title:report.status==='failed'?'desknote · Inbox review failed':'desknote · Inbox reviewed and work planned',body:report.summary.slice(0,220),silent:!reminders.settings.sound,entries:[]});}
 });
 let rendererBaseline = null;
 let commandServer = null;
@@ -46,12 +46,12 @@ async function sendDesktopNotification(payload){
   // Windows may acknowledge a toast even when Do Not Disturb hides its banner.
   const fallback=showReminderWindow(payload);
   const native=new Promise((resolve,reject)=>{
-    if(!Notification.isSupported())return reject(Error('Thông báo Windows chưa được hỗ trợ.'));
+    if(!Notification.isSupported())return reject(Error('Windows notifications are not supported.'));
     const notification=new Notification({title:payload.title,body:payload.body,silent:payload.silent,icon:appIcon(64),timeoutType:'default'});
     notificationRefs.add(notification);
-    const timeout=setTimeout(()=>{notificationRefs.delete(notification);reject(Error('Windows chưa xác nhận hiển thị thông báo.'));},10000);
+    const timeout=setTimeout(()=>{notificationRefs.delete(notification);reject(Error('Windows did not confirm notification delivery.'));},10000);
     notification.once('show',()=>{clearTimeout(timeout);resolve({shown:true});});
-    notification.once('failed',(_event,error)=>{clearTimeout(timeout);notificationRefs.delete(notification);reject(Error(String(error||'Không hiển thị được thông báo Windows.')));});
+    notification.once('failed',(_event,error)=>{clearTimeout(timeout);notificationRefs.delete(notification);reject(Error(String(error||'Could not display the Windows notification.')));});
     notification.once('close',()=>notificationRefs.delete(notification));
     notification.on('click',()=>{if(!app.isQuitting){showWindow();const item=payload.entries?.[0]?.item;if(item)win.webContents.send('notification:open',item);}});
     notification.show();
@@ -71,7 +71,7 @@ function setupNotificationShortcut(){
     if(fs.existsSync(previous)&&!fs.existsSync(shortcut))fs.renameSync(previous,shortcut);
     const success=shell.writeShortcutLink(shortcut,fs.existsSync(shortcut)?'update':'create',{
       target:process.execPath,args:app.isPackaged?'':'"'+__dirname+'"',cwd:__dirname,
-      appUserModelId:'local.desknote',description:'Lịch công việc, sinh hoạt và nhắc giờ'
+      appUserModelId:'local.desknote',description:'Tasks, routines and reminders'
     });
     if(!success)log('Notification shortcut could not be updated.');
   }catch(error){log('Notification shortcut:',error.message);}
@@ -344,16 +344,16 @@ function toggleShow() {
 function buildTrayMenu() {
   if (!tray) return;
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Mở Desknote', click: showWindow },
-    { label: 'Ẩn', click: hideWindow },
+    { label: 'Open Desknote', click: showWindow },
+    { label: 'Hide', click: hideWindow },
     { type: 'separator' },
-    { label: 'Mở cùng Windows', type: 'checkbox', checked: getAutoStart(), click: (m) => setAutoStart(m.checked) },
-    { label: 'Nhắc lịch đúng giờ', type:'checkbox', checked:reminders.settings.enabled, click:m=>{reminders.configure({enabled:m.checked});buildTrayMenu();} },
-    { label: 'Thử thông báo', click:()=>reminders.test().catch(error=>log('Notification test:',error.message)) },
-    { label: 'Rà tin giữa/cuối ngày', type:'checkbox',checked:reviews.settings.enabled,click:m=>{reviews.configure({enabled:m.checked});buildTrayMenu();} },
-    { label: 'Đặt lại vị trí', click: resetPosition },
+    { label: 'Start with Windows', type: 'checkbox', checked: getAutoStart(), click: (m) => setAutoStart(m.checked) },
+    { label: 'Scheduled reminders', type:'checkbox', checked:reminders.settings.enabled, click:m=>{reminders.configure({enabled:m.checked});buildTrayMenu();} },
+    { label: 'Test notification', click:()=>reminders.test().catch(error=>log('Notification test:',error.message)) },
+    { label: 'Midday/evening inbox reviews', type:'checkbox',checked:reviews.settings.enabled,click:m=>{reviews.configure({enabled:m.checked});buildTrayMenu();} },
+    { label: 'Reset position', click: resetPosition },
     { type: 'separator' },
-    { label: 'Thoát', click: () => { app.isQuitting = true; app.quit(); } },
+    { label: 'Quit', click: () => { app.isQuitting = true; app.quit(); } },
   ]));
 }
 
@@ -407,7 +407,7 @@ ipcMain.handle('notifications:test',async()=>{try{return {ok:true,data:await rem
 ipcMain.handle('reviews:status',()=>reviews.status());
 ipcMain.handle('reviews:configure',(_event,fields)=>{try{const data=reviews.configure(fields);buildTrayMenu();return {ok:true,data};}catch(error){return {ok:false,error:error.message};}});
 ipcMain.handle('reviews:undo',()=>{try{return {ok:true,data:reviews.undoRoutineChanges()};}catch(error){return {ok:false,error:error.message};}});
-ipcMain.handle('reviews:run',()=>{if(reviews.running||agyBridge.busy)return {ok:false,error:'AGY đang bận.'};reviews.run('manual').catch(()=>{});return {ok:true};});
+ipcMain.handle('reviews:run',()=>{if(reviews.running||agyBridge.busy)return {ok:false,error:'AGY is busy.'};reviews.run('manual').catch(()=>{});return {ok:true};});
 
 ipcMain.handle('win:expand-side', () => {
   const b = getBounds();
@@ -495,7 +495,7 @@ if (!app.requestSingleInstanceLock()) {
           else if (req.command === 'reviews.preview') { socket.setTimeout(120000);data=await reviews.preview(); }
           else if (req.command === 'reviews.configure') { data=reviews.configure(req.fields||{});buildTrayMenu(); }
           else if (req.command === 'reviews.on'||req.command==='reviews.off') { data=reviews.configure({enabled:req.command.endsWith('.on')});buildTrayMenu(); }
-          else if (req.command === 'reviews.run') { if(reviews.running||agyBridge.busy)throw Error('AGY đang bận.');reviews.run('manual').catch(()=>{});data={started:true}; }
+          else if (req.command === 'reviews.run') { if(reviews.running||agyBridge.busy)throw Error('AGY is busy.');reviews.run('manual').catch(()=>{});data={started:true}; }
           else data = store.command(req);
           if (['add','update','delete','batch','routine.add','routine.update','routine.delete','routine.check','routine.override','routine.clear-override','event.add','event.update','event.delete'].includes(req.command)) {
             lastData = store.read();

@@ -19,14 +19,14 @@ function routineKind(r){
   return 'custom';
 }
 function validateWindow(item,kind){
-  if(!C.validTime(item.time)||!C.validTime(item.endTime))throw Error('Điều chỉnh sinh hoạt cần đủ giờ bắt đầu/kết thúc.');
+  if(!C.validTime(item.time)||!C.validTime(item.endTime))throw Error('Routine adjustments require both start and end times.');
   const a=minutes(item.time),b=minutes(item.endTime),duration=(b-a+1440)%1440;
   const bounds={wake:[10,60],breakfast:[20,90],lunch:[20,90],dinner:[20,90],nap:[10,20],exercise:[15,90],winddown:[30,120],sleep:[480,600],break:[5,30],custom:[5,180]};
   const [min,max]=bounds[kind]||bounds.custom;
-  if(duration<min||duration>max)throw Error(kind==='sleep'?'Lịch tự động phải chừa ít nhất 8 giờ ngủ.':'Khoảng '+kind+' không phù hợp với khung sinh hoạt.');
+  if(duration<min||duration>max)throw Error(kind==='sleep'?'Automatic schedules must allow at least 8 hours of sleep.':'The duration of '+kind+' is outside the allowed routine duration.');
   const windows={wake:[300,510],breakfast:[300,600],lunch:[630,870],dinner:[1020,1260],nap:[720,930],exercise:[360,1230],winddown:[1170,1380],break:[360,1290],custom:[360,1290]};
-  if(kind==='sleep'){if(a<1260||b<300||b>510)throw Error('Giữ giấc ngủ chính vào ban đêm.');}
-  else{const [start,end]=windows[kind]||windows.custom;if(a<start||b>end||b<=a)throw Error('Giờ '+kind+' nằm ngoài khung được phép tự điều chỉnh.');}
+  if(kind==='sleep'){if(a<1260||b<300||b>510)throw Error('Keep the main sleep period at night.');}
+  else{const [start,end]=windows[kind]||windows.custom;if(a<start||b>end||b<=a)throw Error('Time '+kind+' is outside the allowed adjustment window.');}
 }
 function interval(item){const a=new Date(item.date+'T'+item.time+':00').getTime();let b=new Date(item.date+'T'+item.endTime+':00').getTime();if(b<=a)b+=86400000;return [a,b];}
 function prepareRoutineChanges(ops,snapshot,current,now,messageMap=new Map()){
@@ -36,39 +36,39 @@ function prepareRoutineChanges(ops,snapshot,current,now,messageMap=new Map()){
   const targets=new Set();
   for(const op of ops){
     if(op.command!=='routine.add'){const target=op.id+':'+(op.command==='routine.override'?op.date:'default');if(targets.has(target))throw Error('Duplicate routine change.');targets.add(target);}
-    if(!['routine.override','routine.update','routine.add'].includes(op.command))throw Error('Không hỗ trợ thao tác sinh hoạt tự động này.');
-    const fields=JSON.parse(op.fieldsJson);const reason=String(fields.reason||'').trim();if(!reason)throw Error('Điều chỉnh sinh hoạt cần có lý do.');
-    const keys=fields.sourceKeys||[];if(!Array.isArray(keys)||keys.some(k=>!messageMap.has(k)))throw Error('Nguồn điều chỉnh sinh hoạt không hợp lệ.');
+    if(!['routine.override','routine.update','routine.add'].includes(op.command))throw Error('Unsupported automatic routine operation.');
+    const fields=JSON.parse(op.fieldsJson);const reason=String(fields.reason||'').trim();if(!reason)throw Error('Routine adjustments require a reason.');
+    const keys=fields.sourceKeys||[];if(!Array.isArray(keys)||keys.some(k=>!messageMap.has(k)))throw Error('Invalid routine adjustment sources.');
     let command,old,after;
     if(op.command==='routine.add'){
-      if(audit.filter(x=>x.command==='routine.add').length>=3)throw Error('Mỗi lượt chỉ thêm tối đa ba mốc sinh hoạt.');
-      const allowed=['title','time','endTime','days','routineType','reason','sourceKeys'];if(Object.keys(fields).some(k=>!allowed.includes(k)))throw Error('Trường sinh hoạt mới không hợp lệ.');
-      const kind=fields.routineType||routineKind(fields);if(kind==='study')throw Error('Không tự tạo hoặc thay đổi lịch học cố định.');
+      if(audit.filter(x=>x.command==='routine.add').length>=3)throw Error('Each review can add at most three routines.');
+      const allowed=['title','time','endTime','days','routineType','reason','sourceKeys'];if(Object.keys(fields).some(k=>!allowed.includes(k)))throw Error('Invalid fields for a new routine.');
+      const kind=fields.routineType||routineKind(fields);if(kind==='study')throw Error('Fixed study schedules cannot be created or changed automatically.');
       validateWindow(fields,kind);
-      if(draft.routines.some(r=>normalize(r.title)===normalize(fields.title||'')))throw Error('Mốc sinh hoạt này đã tồn tại.');
-      command={command:'routine.add',fields:{title:fields.title,time:fields.time,endTime:fields.endTime,days:fields.days||[0,1,2,3,4,5,6],routineType:kind,notes:'Trợ lý: '+reason,startDate:today,enabled:true,notify:true}};
+      if(draft.routines.some(r=>normalize(r.title)===normalize(fields.title||'')))throw Error('This routine already exists.');
+      command={command:'routine.add',fields:{title:fields.title,time:fields.time,endTime:fields.endTime,days:fields.days||[0,1,2,3,4,5,6],routineType:kind,notes:'Assistant: '+reason,startDate:today,enabled:true,notify:true}};
       after=virtual.command(command);command={...command,id:after.id};
       audit.push({command:'routine.add',id:after.id,before:null,after:structuredClone(after),reason});changed.add(after.id);commands.push(command);continue;
     }
     old=current.routines.find(r=>r.id===op.id);const before=snapshot.routines.find(r=>r.id===op.id);
-    if(!old||!before||JSON.stringify(old)!==JSON.stringify(before))throw Error('Lịch sinh hoạt vừa được bạn sửa; giữ nguyên và đợi lượt mới.');
-    const kind=routineKind(old);if(old.locked||kind==='study')throw Error('Không tự dời lịch học hoặc mốc đã khóa.');
+    if(!old||!before||JSON.stringify(old)!==JSON.stringify(before))throw Error('You recently edited this routine. It will be preserved until the next review.');
+    const kind=routineKind(old);if(old.locked||kind==='study')throw Error('Study sessions and locked routines cannot be moved automatically.');
     if(op.command==='routine.update'){
-      if(!keys.some(k=>messageMap.get(k).isSelf))throw Error('Đổi thói quen lặp cần yêu cầu của chính bạn; việc một ngày dùng điều chỉnh theo ngày.');
-      if(Object.keys(fields).some(k=>!['time','endTime','reason','sourceKeys'].includes(k)))throw Error('Chỉ tự đổi giờ của thói quen lặp, không xóa hay tắt mốc.');
+      if(!keys.some(k=>messageMap.get(k).isSelf))throw Error('Changing a repeating routine requires your explicit request. Use a dated override for a single day.');
+      if(Object.keys(fields).some(k=>!['time','endTime','reason','sourceKeys'].includes(k)))throw Error('Automatic changes can adjust repeating times but cannot delete or disable routines.');
       const next={...old,...fields};validateWindow(next,kind);
       command={command:'routine.update',id:old.id,fields:{time:next.time,endTime:next.endTime}};
       after=virtual.command(command);audit.push({command:'routine.update',id:old.id,before:{time:old.time,endTime:old.endTime},after:{time:after.time,endTime:after.endTime},reason});
     }else{
-      if(Object.keys(fields).some(k=>!['time','endTime','skip','reason','sourceKeys'].includes(k)))throw Error('Điều chỉnh theo ngày có trường không hợp lệ.');
-      if(!C.validDate(op.date)||op.date<today||C.daysUntil(op.date,today)>7)throw Error('Chỉ tự điều chỉnh sinh hoạt trong bảy ngày tới.');
-      if(draft.routineChecks.some(c=>c.routineId===old.id&&c.date===op.date&&c.done))throw Error('Không sửa mốc bạn đã hoàn thành.');
+      if(Object.keys(fields).some(k=>!['time','endTime','skip','reason','sourceKeys'].includes(k)))throw Error('Invalid fields in the dated override.');
+      if(!C.validDate(op.date)||op.date<today||C.daysUntil(op.date,today)>7)throw Error('Automatic routine adjustments are limited to the next seven days.');
+      if(draft.routineChecks.some(c=>c.routineId===old.id&&c.date===op.date&&c.done))throw Error('Completed occurrences cannot be changed.');
       const existing=current.routineOverrides.find(o=>o.routineId===old.id&&o.date===op.date)||null;
       const original=snapshot.routineOverrides.find(o=>o.routineId===old.id&&o.date===op.date)||null;
-      if(JSON.stringify(existing)!==JSON.stringify(original))throw Error('Điều chỉnh ngày này vừa thay đổi.');
+      if(JSON.stringify(existing)!==JSON.stringify(original))throw Error('This dated override was recently changed.');
       const effective={...old,...fields};
-      if(fields.skip){if(!['nap','break','exercise','custom'].includes(kind))throw Error('Không tự bỏ bữa, giấc ngủ hoặc chuẩn bị ngủ.');}
-      else{validateWindow(effective,kind);if(new Date(op.date+'T'+effective.time+':00').getTime()<now)throw Error('Không tự sửa mốc đã qua.');}
+      if(fields.skip){if(!['nap','break','exercise','custom'].includes(kind))throw Error('Meals, sleep and wind-down cannot be skipped automatically.');}
+      else{validateWindow(effective,kind);if(new Date(op.date+'T'+effective.time+':00').getTime()<now)throw Error('Past occurrences cannot be changed automatically.');}
       command={command:'routine.override',id:old.id,date:op.date,fields:{time:effective.time,endTime:effective.endTime,skip:!!fields.skip,reason}};
       after=virtual.command(command);audit.push({command:'routine.override',id:old.id,date:op.date,before:existing,after:structuredClone(after),reason});
     }
@@ -85,7 +85,7 @@ function prepareRoutineChanges(ops,snapshot,current,now,messageMap=new Map()){
       if(kind==='break'&&other.kind==='routine'&&routineKind(other)==='study')continue;
       const start=new Date(other.date+'T'+other.time+':00').getTime();
       const [c,d]=other.kind==='task'||!other.endTime?[start,start+(other.durationMinutes||45)*60000]:interval(other);
-      if(a<d&&b>c)throw Error('Điều chỉnh '+item.title+' trùng '+other.title+' ('+item.date+').');
+      if(a<d&&b>c)throw Error('Adjustment to '+item.title+' overlaps '+other.title+' ('+item.date+').');
     }
   }
   return {draft,commands,audit};

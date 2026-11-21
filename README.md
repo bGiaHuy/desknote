@@ -13,6 +13,8 @@ Requires Windows, Node.js and Python 3.12 for native desktop attachment.
 
 Drag the header to move the widget. Alt+Shift+T toggles visibility. The tray menu controls startup, notifications and quitting.
 
+The interface, calendar labels, notifications and CLI help are in English. Existing task titles, notes and other user content stay in their original language. AGY responds in English by default.
+
 ## CLI
 
     node cli.js help

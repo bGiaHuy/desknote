@@ -29,10 +29,10 @@ const TAG_COLORS = [
   ['#FCE8EE', '#C94F72'], ['#FBF0DC', '#B87718'], ['#E4F4F4', '#2E8F8F'],
 ];
 const PRIORITY = {
-  high: { label: 'Cao', color: '#d49b9c' },
-  medium: { label: 'Vừa', color: '#cfbc89' },
-  low: { label: 'Thấp', color: '#abc4ce' },
-  none: { label: 'Không', color: '#C9C6BE' },
+  high: { label: 'High', color: '#d49b9c' },
+  medium: { label: 'Medium', color: '#cfbc89' },
+  low: { label: 'Low', color: '#abc4ce' },
+  none: { label: 'None', color: '#C9C6BE' },
 };
 
 // ---------- state ----------
@@ -40,14 +40,14 @@ let S = null;
 let openId = null;
 let saveTimer = null;
 
-function seed() { return {version:1,activeCat:'@all',categories:[{id:'work',name:'Công việc',icon:''},{id:'study',name:'Học tập',icon:''}],tasks:[]}; }
+function seed() { return {version:1,activeCat:'@all',categories:[{id:'work',name:'Work',icon:''},{id:'study',name:'Study',icon:''}],tasks:[]}; }
 
 let canSave = false;
 function persist() {
   if (!canSave || !S) return;
   clearTimeout(saveTimer);
   window.scheduleChanged?.();
-  saveTimer = setTimeout(() => { saveTimer = null; if (api.saveSync && !api.saveSync(S)) toast('Không lưu được. Giữ ứng dụng mở và thử lại.'); else if (!api.saveSync) api.save(S); }, 250);
+  saveTimer = setTimeout(() => { saveTimer = null; if (api.saveSync && !api.saveSync(S)) toast('Could not save. Keep the app open and try again.'); else if (!api.saveSync) api.save(S); }, 250);
 }
 window.addEventListener('beforeunload', () => { clearTimeout(saveTimer); if (S && canSave) (api.saveSync || api.save)(S); });
 
@@ -63,11 +63,11 @@ function fmtDate(iso) {
   const d = new Date(iso + 'T00:00:00');
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const diff = Math.round((d - today) / 86400000);
-  const md = d.toLocaleDateString('vi-VN', { month: 'short', day: 'numeric' });
-  if (diff === 0) return `Hôm nay, ${md}`;
-  if (diff === 1) return `Ngày mai, ${md}`;
-  if (diff === -1) return `Hôm qua, ${md}`;
-  return d.toLocaleDateString('vi-VN', { weekday: 'short', month: 'short', day: 'numeric' });
+  const md = d.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' });
+  if (diff === 0) return `Today, ${md}`;
+  if (diff === 1) return `Tomorrow, ${md}`;
+  if (diff === -1) return `Yesterday, ${md}`;
+  return d.toLocaleDateString('en-GB', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 function tagColor(name) {
   let h = 0; for (const ch of name.toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -91,15 +91,15 @@ function parseQuickAdd(text) {
 
 // ---------- header / greeting ----------
 function renderGreeting() {
-  $('#greeting').textContent = agendaView ? 'Lịch làm việc' : 'Việc cần làm';
-  $('#deskDate').textContent = new Date().toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit',year:'numeric'});
+  $('#greeting').textContent = agendaView ? 'Agenda' : 'Tasks';
+  $('#deskDate').textContent = new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
 }
 
 function renderStats(celebrate = false) {
   const list = catTasks();
   const done = list.filter((t) => t.done).length;
   const pct = list.length ? Math.round((done / list.length) * 100) : 0;
-  $('#todaySub').textContent = list.length ? `${list.length - done} việc còn lại · ${done} hoàn thành` : 'Chưa có công việc';
+  $('#todaySub').textContent = list.length ? `${list.length - done} remaining · ${done} completed` : 'No tasks yet';
   $('#progressFill').style.width = pct + '%';
   $('#progressPct').textContent = pct + '%';
 
@@ -118,8 +118,8 @@ function floatHearts() {}
 // ---------- tabs ----------
 function renderTabs() {
   const nav = $('#tabs');
-  nav.innerHTML = [{id:'@all',name:'Tất cả',icon:''},...S.categories].map((c) => `
-    <button class="tab ${c.id === S.activeCat ? 'active' : ''}" data-id="${c.id}" draggable="${c.id !== '@all'}" title="Chọn danh sách">
+  nav.innerHTML = [{id:'@all',name:'All',icon:''},...S.categories].map((c) => `
+    <button class="tab ${c.id === S.activeCat ? 'active' : ''}" data-id="${c.id}" draggable="${c.id !== '@all'}" title="Choose a list">
       <span class="emoji">${esc(c.icon)}</span><span class="name">${esc(c.name)}</span><span class="count"></span>
     </button>`).join('') + `<button class="tab add" id="addCat" title="New category">+</button>`;
 
@@ -201,7 +201,7 @@ function selectCat(id) {
 }
 
 function addCat() {
-  const c = { id: uid(), name: 'Danh sách mới', icon: EMOJIS[(S.categories.length + 4) % EMOJIS.length] };
+  const c = { id: uid(), name: 'New list', icon: EMOJIS[(S.categories.length + 4) % EMOJIS.length] };
   S.categories.push(c);
   S.activeCat = c.id;
   persist();
@@ -268,9 +268,9 @@ const ICON_X = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>'
 const ICON_CHECK = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
 const STATUS = {
-  todo: { label: 'Cần làm' },
-  progress: { label: 'Đang làm' },
-  done: { label: 'Đã xong' },
+  todo: { label: 'To do' },
+  progress: { label: 'In progress' },
+  done: { label: 'Done' },
 };
 const STATUS_RANK = { todo: 0, progress: 1 };
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2, none: 3 };
@@ -302,13 +302,13 @@ function statusMenu(anchor, t, after) {
 function taskRow(t, i, still = false) {
   const subsDone = t.subtasks.filter((s) => s.done).length;
   const meta = [];
-  if(t.plannedDate)meta.push(`<span class="mi">Dự kiến ${esc(fmtDate(t.plannedDate))}${t.plannedTime?' · '+esc(t.plannedTime):''}</span>`);
+  if(t.plannedDate)meta.push(`<span class="mi">Planned ${esc(fmtDate(t.plannedDate))}${t.plannedTime?' · '+esc(t.plannedTime):''}</span>`);
   if(t.time || t.date) {
     const overdue = t.date && new Date(t.date + 'T' + (t.time || '23:59')) < new Date() && !t.done;
     const label = [t.date ? fmtDate(t.date) : '',t.time].filter(Boolean).join(' · ');
     meta.push(`<span class="mi t-clock ${overdue ? 'overdue' : ''}">${esc(label)}</span>`);
   }
-  if(t.status === 'progress') meta.push('<span class="mi">Đang làm</span>');
+  if(t.status === 'progress') meta.push('<span class="mi">In progress</span>');
   if (t.priority && t.priority !== 'none') meta.push(`<span class="mi"><span class="pdot" style="background:${PRIORITY[t.priority].color}"></span>${PRIORITY[t.priority].label}</span>`);
   if (t.subtasks.length) meta.push(`<span class="mi">${ICON_SUB}${subsDone}/${t.subtasks.length}</span>`);
   if (t.notes || t.desc) meta.push(`<span class="mi">${ICON_NOTE}</span>`);
@@ -357,7 +357,7 @@ function renderList({ animate = false } = {}) {
   const ul = $('#tasks');
   const all = catTasks();
   if (!all.length) {
-    ul.innerHTML = `<li class="empty"><span class="big">🌱</span>Chưa có việc trong mục này.<br/>Thêm công việc ở bên dưới.</li>`;
+    ul.innerHTML = `<li class="empty"><span class="big">🌱</span>No tasks in this list.<br/>Add a task below.</li>`;
     return;
   }
   const before = animate ? rowPositions() : null;
@@ -369,10 +369,10 @@ function renderList({ animate = false } = {}) {
       const heading = agendaView && (!i || active[i-1].date !== t.date) ? `<li class="agenda-heading">${esc(fmtDate(t.date))}</li>` : '';
       return heading + taskRow(t, i, animate);
     }).join('')
-    : `<li class="empty small"><span class="big">🌸</span>Đã hoàn thành mọi việc.</li>`;
+    : `<li class="empty small"><span class="big">🌸</span>All tasks completed.</li>`;
   if (done.length) {
     html += `<li class="done-toggle ${S.showDone ? 'open' : ''}"><button id="doneToggle">
-      <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>Đã hoàn thành<span class="n">${done.length}</span></button></li>`;
+      <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>Completed<span class="n">${done.length}</span></button></li>`;
     if (S.showDone) html += done.map((t, i) => taskRow(t, i, animate)).join('');
   }
   ul.innerHTML = html;
@@ -609,7 +609,7 @@ function fillDetail() {
   renderPriority();
   renderTags();
   renderSubs();
-  $('#dCreated').textContent = 'Tạo lúc ' + new Date(t.createdAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  $('#dCreated').textContent = 'Created ' + new Date(t.createdAt).toLocaleString('en-GB', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
 function renderDateTime() {
@@ -858,7 +858,7 @@ function toast(msg, undo) {
 }
 
 // ---------- window buttons ----------
-async function setPinUI(on) { $('#btnPin').classList.toggle('on', on); $('#btnPin').title = on ? 'Bỏ ghim' : 'Luôn ở trên'; }
+async function setPinUI(on) { $('#btnPin').classList.toggle('on', on); $('#btnPin').title = on ? 'Unpin' : 'Always on top'; }
 $('#btnPin').onclick = async () => { const on = await api.togglePin(); setPinUI(on); toast(on ? '📌 Pinned — stays above other apps' : 'Unpinned — other apps can cover it'); };
 api.onPinChanged(setPinUI);
 $('#btnClose').onclick = () => api.hide();
@@ -882,16 +882,16 @@ $('#btnMenu').onclick = async e => {
   const auto = await api.getAutoStart();
   const notifications=await api.getNotifications();
   showMenu(e.currentTarget,[
-    {label:'Nhắc lịch đúng giờ',checked:notifications.enabled,onClick:async()=>{const result=await api.configureNotifications({enabled:!notifications.enabled});toast(result.ok?(!notifications.enabled?'Đã bật nhắc lịch':'Đã tắt nhắc lịch'):result.error);}},
-    {label:'Âm thanh thông báo',checked:notifications.sound,onClick:async()=>{await api.configureNotifications({sound:!notifications.sound});}},
-    {label:'Thử thông báo Windows',onClick:async()=>{const result=await api.testNotification();toast(result.ok?'Đã gửi thông báo Windows':result.error);}},
+    {label:'Scheduled reminders',checked:notifications.enabled,onClick:async()=>{const result=await api.configureNotifications({enabled:!notifications.enabled});toast(result.ok?(!notifications.enabled?'Reminders enabled':'Reminders disabled'):result.error);}},
+    {label:'Notification sound',checked:notifications.sound,onClick:async()=>{await api.configureNotifications({sound:!notifications.sound});}},
+    {label:'Test Windows notification',onClick:async()=>{const result=await api.testNotification();toast(result.ok?'Windows notification sent':result.error);}},
     {sep:true},
-    {label:'Mở cùng Windows',checked:auto,onClick:async()=>{await api.setAutoStart(!auto);toast(!auto?'Đã bật mở cùng Windows':'Đã tắt mở cùng Windows');}},
+    {label:'Start with Windows',checked:auto,onClick:async()=>{await api.setAutoStart(!auto);toast(!auto?'Start with Windows enabled':'Start with Windows disabled');}},
     {sep:true},
-    {label:'Dọn việc đã hoàn thành',onClick:clearCompleted},
-    {label:'Mở thư mục dữ liệu',onClick:()=>api.openData()},
+    {label:'Clear completed tasks',onClick:clearCompleted},
+    {label:'Open data folder',onClick:()=>api.openData()},
     {sep:true},
-    {label:'Thoát Desknote',danger:true,onClick:()=>api.quit()}
+    {label:'Quit Desknote',danger:true,onClick:()=>api.quit()}
   ]);
 };
 
@@ -928,19 +928,19 @@ document.addEventListener('input',()=>{lastTyped=Date.now();});
 async function refreshExternal() {
   if(!S || Date.now()-lastTyped<900) {refreshTimer=setTimeout(refreshExternal,1000);return;}
   // Flush local edits first; main merges only edited fields into the current store.
-  if(saveTimer) { clearTimeout(saveTimer); saveTimer=null; if(api.saveSync && !api.saveSync(S)) return toast('Không lưu được thay đổi cục bộ.'); }
+  if(saveTimer) { clearTimeout(saveTimer); saveTimer=null; if(api.saveSync && !api.saveSync(S)) return toast('Could not save local changes.'); }
   const result=await api.load();
-  if(result.status!=='ok')return toast('Không đọc được cập nhật.');
+  if(result.status!=='ok')return toast('Could not load updates.');
   S=result.data;
   if(S.activeCat!=='@all'&&!cat(S.activeCat))S.activeCat='@all';
   if(openId && !task(openId))await closeDetail();
   renderTabs(); renderList(); renderStats();
   if(openId)fillDetail();
   window.scheduleChanged?.();
-  $('#syncLabel').textContent='Đã cập nhật '+new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
+  $('#syncLabel').textContent='Updated '+new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
 }
 api.onExternalChange?.(()=>{clearTimeout(refreshTimer);refreshTimer=setTimeout(refreshExternal,150);});
-$('.card').insertAdjacentHTML('beforeend','<footer class="desk-footer"><span id="syncLabel">Lưu trên máy</span><span>Alt + Shift + T</span></footer>');
+$('.card').insertAdjacentHTML('beforeend','<footer class="desk-footer"><span id="syncLabel">Saved locally</span><span>Alt + Shift + T</span></footer>');
 
 // ---------- boot ----------
 (async function init() {

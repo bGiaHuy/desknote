@@ -41,9 +41,9 @@ class NotificationEngine{
   start(){if(this.timer)return;this.tick();this.timer=setInterval(()=>this.tick(),10000);this.timer.unref?.();}
   stop(){clearInterval(this.timer);this.timer=null;}
   async test(){
-    if(!this.supported())throw Error('Windows chưa hỗ trợ thông báo cho ứng dụng này.');
+    if(!this.supported())throw Error('Windows notifications are not supported for this app.');
     try{
-      await this.send({title:'desknote · Nhắc lịch đã sẵn sàng',body:'Đến giờ ăn, nghỉ, học hoặc ngủ, bạn sẽ nhận thông báo tại đây.',silent:!this.settings.sound,entries:[]});
+      await this.send({title:'desknote · Reminders are ready',body:'Scheduled reminders for meals, breaks, study and sleep appear here.',silent:!this.settings.sound,entries:[]});
       this.state.lastShownAt=this.clock();this.state.lastError=null;write(this.stateFile,this.state);return {shown:true,at:this.state.lastShownAt};
     }catch(error){this.state.lastError=error.message;write(this.stateFile,this.state);throw error;}
   }
@@ -54,14 +54,14 @@ class NotificationEngine{
       if(!this.settings.enabled)return;
       const entries=dueEntries(this.store.read(),from,now,this.state.sent);
       if(!entries.length)return;
-      if(!this.supported()){this.state.lastError='Thông báo hệ thống chưa được hỗ trợ.';write(this.stateFile,this.state);return;}
+      if(!this.supported()){this.state.lastError='System notifications are not supported.';write(this.stateFile,this.state);return;}
       const groups=new Map();for(const entry of entries){const group=String(entry.dueAt);if(!groups.has(group))groups.set(group,[]);groups.get(group).push(entry);}
       for(const group of groups.values()){
         for(const entry of group)this.state.sent[entry.key]={status:'sending',at:now,attempts:(this.state.sent[entry.key]?.attempts||0)+1};
         write(this.stateFile,this.state);
         const first=group[0];
-        const title=(first.phase==='end'?'Kết thúc phiên · ':first.lead?'Sắp đến giờ · ':'Đến giờ · ')+(group.length===1?first.item.title:group.length+' lịch');
-        const body=group.map(({item,lead,phase})=>`${phase==='end'?'Kết thúc · ':''}${lead?'Còn '+lead+' phút · ':''}${item.time}${item.endTime?'–'+item.endTime:''} · ${item.title}`).join('\n');
+        const title=(first.phase==='end'?'Session ended · ':first.lead?'Starting soon · ':'Starting now · ')+(group.length===1?first.item.title:group.length+' items');
+        const body=group.map(({item,lead,phase})=>`${phase==='end'?'Ended · ':''}${lead?'Remaining: '+lead+' minutes ·':''}${item.time}${item.endTime?'–'+item.endTime:''} · ${item.title}`).join('\n');
         try{
           await this.send({title,body,silent:!this.settings.sound,entries:group});
           for(const entry of group)this.state.sent[entry.key].status='shown';

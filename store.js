@@ -49,15 +49,15 @@ function validate(data) {
         if(key==='routines'&&item.locked!==undefined&&typeof item.locked!=='boolean')throw Error('Invalid routine lock.');
         if(key==='routines'&&item.routineType!==undefined&&!['wake','breakfast','lunch','dinner','nap','exercise','winddown','sleep','break','study','custom'].includes(item.routineType))throw Error('Invalid routine type.');
         if(item.notify!==undefined&&typeof item.notify!=='boolean')throw Error('Notify must be a boolean.');
-        if(typeof item.title!=='string'||!item.title.trim()||item.title.length>200)throw Error('Tên lịch phải có 1–200 ký tự.');
-        if(item.time&&!Schedule.validTime(item.time)||item.endTime&&!Schedule.validTime(item.endTime))throw Error('Giờ phải có dạng HH:mm.');
+        if(typeof item.title!=='string'||!item.title.trim()||item.title.length>200)throw Error('Schedule titles must contain 1–200 characters.');
+        if(item.time&&!Schedule.validTime(item.time)||item.endTime&&!Schedule.validTime(item.endTime))throw Error('Times must use HH:mm format.');
         if(key==='events'){
-          if(!Schedule.validDate(item.date)||!['none','yearly'].includes(item.repeat)||typeof item.important!=='boolean')throw Error('Ngày hoặc kiểu lặp của sự kiện không hợp lệ.');
+          if(!Schedule.validDate(item.date)||!['none','yearly'].includes(item.repeat)||typeof item.important!=='boolean')throw Error('Invalid event date or repeat rule.');
         }else{
           if(item.excludeDates!==undefined&&(!Array.isArray(item.excludeDates)||item.excludeDates.some(date=>!Schedule.validDate(date))))throw Error('Invalid routine exception date.');
-          if(!Array.isArray(item.days)||!item.days.length||item.days.some(d=>!Number.isInteger(d)||d<0||d>6)||new Set(item.days).size!==item.days.length)throw Error('Chọn ít nhất một ngày lặp (0=CN, 1=T2…6=T7).');
-          if(!Schedule.validTime(item.time)||typeof item.enabled!=='boolean')throw Error('Sinh hoạt cần giờ và trạng thái.');
-          if(item.startDate&&!Schedule.validDate(item.startDate)||item.endDate&&!Schedule.validDate(item.endDate)||item.startDate&&item.endDate&&item.startDate>item.endDate)throw Error('Khoảng ngày sinh hoạt không hợp lệ.');
+          if(!Array.isArray(item.days)||!item.days.length||item.days.some(d=>!Number.isInteger(d)||d<0||d>6)||new Set(item.days).size!==item.days.length)throw Error('Choose at least one repeat day (0=Sun, 1=Mon through 6=Sat).');
+          if(!Schedule.validTime(item.time)||typeof item.enabled!=='boolean')throw Error('Routines require a time and enabled state.');
+          if(item.startDate&&!Schedule.validDate(item.startDate)||item.endDate&&!Schedule.validDate(item.endDate)||item.startDate&&item.endDate&&item.startDate>item.endDate)throw Error('Invalid routine date range.');
         }
       }
     }
@@ -78,7 +78,7 @@ function makeTask(fields) {
   return t;
 }
 function seed() {
-  return { version: 1, activeCat: '@all', categories: [{id:'work',name:'Công việc',icon:''},{id:'study',name:'Học tập',icon:''}], tasks: [
+  return { version: 1, activeCat: '@all', categories: [{id:'work',name:'Work',icon:''},{id:'study',name:'Study',icon:''}], tasks: [
     makeTask({id:'dbi202',catId:'study',title:'Review study notes',date:'2026-12-01',time:'09:00',priority:'high',subtasks:[{id:'review',text:'Review notes',done:false}]}),
     makeTask({id:'loginfix',title:'Plan the week',priority:'high',status:'progress'}),
     makeTask({id:'gd2',catId:'study',title:'Read a chapter',priority:'medium'})
@@ -158,7 +158,7 @@ class Store {
         const defaults=kind==='routine'?{title:'',time:'',endTime:'',days:[0,1,2,3,4,5,6],startDate:'',endDate:'',enabled:true,notes:''}:{title:'',date:'',time:'',endTime:'',repeat:'none',important:false,notes:''};
         item={id:req.id||crypto.randomUUID().slice(0,8),...defaults,...fields};data[key].push(item);
       }else{
-        item=data[key].find(x=>x.id===req.id);if(!item)throw Error('Không tìm thấy lịch: '+req.id);
+        item=data[key].find(x=>x.id===req.id);if(!item)throw Error('Schedule item not found: '+req.id);
         if(action==='delete'){
           data[key]=data[key].filter(x=>x.id!==req.id);
           if(kind==='routine'){data.routineChecks=data.routineChecks.filter(c=>c.routineId!==req.id);data.routineOverrides=data.routineOverrides.filter(c=>c.routineId!==req.id);}

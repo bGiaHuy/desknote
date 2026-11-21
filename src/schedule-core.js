@@ -29,14 +29,14 @@
     return routine.enabled!==false&&!override?.skip&&routine.days.includes(weekday(date))&&(!routine.startDate||date>=routine.startDate)&&(!routine.endDate||date<=routine.endDate)&&(!!override||!(routine.excludeDates||[]).includes(date));
   }
   function occurrences(data,from,to=from,{includeDone=true}={}){
-    if(!validDate(from)||!validDate(to)||to<from||daysUntil(to,from)>370)throw Error('Khoảng lịch tối đa 371 ngày.');
+    if(!validDate(from)||!validDate(to)||to<from||daysUntil(to,from)>370)throw Error('The schedule range cannot exceed 371 days.');
     const result=[];
     for(const task of data.tasks||[]){
       if(task.date&&task.date>=from&&task.date<=to&&(includeDone||!task.done))result.push({...task,kind:'task',sourceId:task.id,important:task.important===true});
       if(task.plannedDate&&task.plannedDate>=from&&task.plannedDate<=to&&(includeDone||!task.done)&&!(task.date===task.plannedDate&&task.time===task.plannedTime)){
         const start=task.plannedTime?new Date(task.plannedDate+'T'+task.plannedTime+':00'):null;
         const end=start?new Date(start.getTime()+(task.durationMinutes||45)*60000):null;
-        result.push({...task,date:task.plannedDate,time:task.plannedTime||'',endTime:end?String(end.getHours()).padStart(2,'0')+':'+String(end.getMinutes()).padStart(2,'0'):'',title:'Làm · '+task.title,kind:'task',sourceId:task.id,important:false,occurrenceType:'work'});
+        result.push({...task,date:task.plannedDate,time:task.plannedTime||'',endTime:end?String(end.getHours()).padStart(2,'0')+':'+String(end.getMinutes()).padStart(2,'0'):'',title:'Work · '+task.title,kind:'task',sourceId:task.id,important:false,occurrenceType:'work'});
       }
     }
     for(const event of data.events||[]){
@@ -78,10 +78,10 @@
   }
   function allEntries(data,from=today()){
     return [...(data.tasks||[]).filter(t=>t.date).map(t=>({...t,kind:'task',sourceId:t.id})),
-      ...(data.tasks||[]).filter(t=>t.plannedDate&&!(t.date===t.plannedDate&&t.time===t.plannedTime)).map(t=>({...t,date:t.plannedDate,time:t.plannedTime,title:'Làm · '+t.title,kind:'task',sourceId:t.id,important:false,occurrenceType:'work'})),
+      ...(data.tasks||[]).filter(t=>t.plannedDate&&!(t.date===t.plannedDate&&t.time===t.plannedTime)).map(t=>({...t,date:t.plannedDate,time:t.plannedTime,title:'Work · '+t.title,kind:'task',sourceId:t.id,important:false,occurrenceType:'work'})),
       ...(data.events||[]).map(e=>({...e,date:nextEvent(e,from)||e.date,kind:'event',sourceId:e.id,done:false}))]
       .sort((a,b)=>(a.date+(a.time||'99:99')).localeCompare(b.date+(b.time||'99:99')));
   }
-  function dayLabel(date){return new Date(date+'T12:00:00').toLocaleDateString('vi-VN',{weekday:'short',day:'2-digit',month:'2-digit'});}
+  function dayLabel(date){return new Date(date+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'2-digit'});}
   return {iso,today,validDate,validTime,addDays,daysUntil,weekday,normalize,nextEvent,routineOn,occurrences,milestones,allEntries,dayLabel,sessionBounds,currentSessions};
 });

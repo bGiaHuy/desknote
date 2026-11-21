@@ -12,7 +12,7 @@ function unpack(result){
 function readZalo(since,until,limit=500){
   const python=path.join(process.env.LOCALAPPDATA,'Programs','Python','Python312','python.exe');
   return new Promise((resolve,reject)=>execFile(python,[path.join(__dirname,'read-zalo-review.py'),String(since),String(until),String(limit)],{encoding:'utf8',windowsHide:true,timeout:20000,maxBuffer:4*1024*1024},(error,stdout)=>{
-    if(error)return reject(Error('Không đọc được kho tin Zalo. Kiểm tra listener và tài khoản đã đăng nhập.'));
+    if(error)return reject(Error('Could not read the Zalo archive. Check the listener and signed-in account.'));
     try{const data=JSON.parse(stdout);if(data.messages.some(m=>EXCLUDED_ZALO.has(m.threadId)))throw Error('Excluded Zalo chat returned.');resolve(data);}catch(error){reject(error);}
   }));
 }
@@ -37,7 +37,7 @@ async function readMessenger(since,until,limit=500){
     const truncated=!complete||messages.length>limit;messages=messages.slice(0,limit);
     return {source:'messenger',messages,connected:status.state==='connected',connectionState:status.state,archiveCoverage:status.coverage,error:status.state==='connected'?undefined:(/no longer valid|login.php/.test(status.last_error||'')?'Messenger: Facebook session expired; sign in again in the existing Messenger MCP.':'Messenger listener is '+status.state),truncated,
       throughMs:status.state==='connected'?(truncated&&messages.length?messages.at(-1).timestamp-1:until):since,
-      coverage:'Messenger chỉ có tin listener đã nhận/lưu; không có API lấy lại toàn bộ lịch sử trên máy chủ.'};
+      coverage:'Messenger only includes messages captured by its listener; complete server history is unavailable.'};
   }finally{await client.close().catch(()=>{});}
 }
 module.exports={EXCLUDED_ZALO,unpack,readZalo,readMessenger};

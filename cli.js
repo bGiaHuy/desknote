@@ -16,8 +16,8 @@ function help() {
   console.log('desknote reviews.status | reviews.preview | reviews.run | reviews.undo | reviews.on | reviews.off\nreviews.preview reads MCP sources without calling AGY. reviews.run starts an authorized live AGY review.\nTask planning: --plan-date YYYY-MM-DD --plan-time HH:mm --minutes 45 (separate from deadline --date/--time).');
   console.log('desknote notifications | notifications.on | notifications.off | notifications.test\ndesknote notifications.sound-on | notifications.sound-off\nUse --notify true|false on tasks, events and routines.');
   console.log('desknote desktop  (native desktop attachment status)');
-  console.log('desknote routine.add "Tên sinh hoạt" --time 07:00 --days 1,2,3,4,5\ndesknote routine.update ID --time 08:00 | routine.delete ID\ndesknote routine.check ID --date YYYY-MM-DD --done true\ndesknote event.add "Mốc quan trọng" --date YYYY-MM-DD --important true --repeat yearly\ndesknote event.update ID --date YYYY-MM-DD | event.delete ID\ndesknote routines | events | milestones | schedule --from YYYY-MM-DD --to YYYY-MM-DD');
-  console.log(`desknote list [--json]\n desknote agenda [--date YYYY-MM-DD] [--json]\n desknote get ID\n desknote add "Tên việc" [--date YYYY-MM-DD] [--time HH:mm] [--list work|study] [--priority high|medium|low|none]\n desknote update ID [--title "Tên mới"] [--status todo|progress|done] [--date YYYY-MM-DD] [--time HH:mm] [--notes "..."]\n desknote done ID | desknote reopen ID | desknote delete ID\n desknote path | desknote show\n desknote request FILE.json  (structured command; supports subtasks/tags)\n\nNgày giờ dùng giờ địa phương Windows. Lệnh tự mở widget nếu chưa chạy.`);
+  console.log('desknote routine.add "Routine title" --time 07:00 --days 1,2,3,4,5\ndesknote routine.update ID --time 08:00 | routine.delete ID\ndesknote routine.check ID --date YYYY-MM-DD --done true\ndesknote event.add "Important date" --date YYYY-MM-DD --important true --repeat yearly\ndesknote event.update ID --date YYYY-MM-DD | event.delete ID\ndesknote routines | events | milestones | schedule --from YYYY-MM-DD --to YYYY-MM-DD');
+  console.log(`desknote list [--json]\n desknote agenda [--date YYYY-MM-DD] [--json]\n desknote get ID\n desknote add "Task title" [--date YYYY-MM-DD] [--time HH:mm] [--list work|study] [--priority high|medium|low|none]\n desknote update ID [--title "New title"] [--status todo|progress|done] [--date YYYY-MM-DD] [--time HH:mm] [--notes "..."]\n desknote done ID | desknote reopen ID | desknote delete ID\n desknote path | desknote show\n desknote request FILE.json  (structured command; supports subtasks/tags)\n\nDates and times use the local Windows timezone. Commands start the widget if needed.`);
 }
 if (command === 'help' || command === '--help') { help(); process.exit(0); }
 let req = {command};
@@ -76,7 +76,7 @@ function request() { return new Promise((resolve,reject)=>{
   }
   if((command==='list'||command==='agenda')&&!flags.json) {
     const list=Array.isArray(result)?result:result.tasks;
-    console.log(list.map(t=>`${t.done?'[x]':'[ ]'} ${t.id.padEnd(9)} ${(t.date||'').padEnd(10)} ${(t.time||'').padEnd(5)} ${t.title}`).join('\n')||'Chưa có lịch.');
+    console.log(list.map(t=>`${t.done?'[x]':'[ ]'} ${t.id.padEnd(9)} ${(t.date||'').padEnd(10)} ${(t.time||'').padEnd(5)} ${t.title}`).join('\n')||'Nothing scheduled.');
   } else console.log(JSON.stringify(result,null,2));
 })().catch(e=>{console.error(e.message);process.exitCode=1;});
 }

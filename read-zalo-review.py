@@ -31,4 +31,4 @@ sync=dict(c.execute('SELECT key,value FROM sync_state'))
 connected=sync.get('lastConnectionOk')=='true'
 print(json.dumps({'source':'zalo','messages':messages,'connected':connected,'truncated':truncated,
  'throughMs':(rows[-1]['timestamp']-1 if truncated and rows else until) if connected else since,
- 'excludedThreads':list(excluded),'coverage':'Tin đã được listener Zalo đồng bộ; không mở phiên đăng nhập mới.'},ensure_ascii=False))
+ 'excludedThreads':list(excluded),'coverage':'Messages synced by the existing Zalo listener; no new sign-in session is opened.'},ensure_ascii=False))
